@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+
+input, select, textarea {
+  font-size: 16px !important;
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+}
+
+@media screen and (max-width: 768px) {
+  input, select, textarea {
+    font-size: 16px !important;
+    transform: none !important;
+  }
+}
+
+@media print {
+  body > *:not(#report-print-overlay):not(#print-label-root) {
+    display: none !important;
+  }
+  #report-print-overlay {
+    display: block !important;
+  }
+  #print-label-root {
+    visibility: visible;
+    position: fixed;
+    top: 0;
+    left: 0;
+  }
+}
+
