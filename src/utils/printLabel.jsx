@@ -44,9 +44,8 @@ export const generateLabelHTML = (labelData) => {
     contentHTML = `
       <div class="shop-name">THE FRENCH MOBILES</div>
       <hr/>
-      <div class="main-text">${data.customerName || ''}</div>
-      <div class="sub-text">${data.brand || ''} ${data.model || ''}</div>
-      <div class="sub-text">${data.complaintTypes?.[0] || ''}</div>
+      <div class="main-text">${data.brand || ''} ${data.model || ''}</div>
+      <div class="sub-text">${data.customerName || ''}${data.complaintTypes?.[0] ? ' · ' + data.complaintTypes[0] : ''}</div>
       <div class="price">Est: Rs.${data.estimatedPrice || ''}</div>
       <img class="barcode" src="${barcodeDataUrl}" />
       <div class="label-num">#${labelNumber} · ${data.orderNumber || ''}</div>
@@ -71,10 +70,10 @@ export const generateLabelHTML = (labelData) => {
     .shop-name { font-size: 7pt; font-weight: bold; letter-spacing: 0.5pt; text-align: center; width: 100%; line-height: 1.1; }
     hr { width: 100%; border: none; border-top: 0.3pt solid black; margin: 0; }
     .main-text { font-size: 8pt; font-weight: bold; text-align: center; width: 100%; line-height: 1.1; }
-    .sub-text { font-size: 6pt; text-align: center; color: #333; width: 100%; line-height: 1.1; }
+    .sub-text { font-size: 8pt; font-weight: bold; text-align: center; color: #000000; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; letter-spacing: 0.3pt; }
     .price { font-size: 9pt; font-weight: bold; text-align: center; line-height: 1.1; }
     .barcode { width: 48mm; height: 5mm; display: block; }
-    .label-num { font-size: 5pt; color: #555; text-align: center; width: 100%; line-height: 1.1; }
+    .label-num { font-size: 7pt; font-weight: bold; color: #000000; text-align: center; width: 100%; line-height: 1.2; letter-spacing: 0.5pt; }
   `
 
   return `
@@ -141,9 +140,8 @@ export const printLabel = async (labelData) => {
       contentHTML = `
         <div class="shop-name">THE FRENCH MOBILES</div>
         <hr/>
-        <div class="main-text">${data.customerName || ''}</div>
-        <div class="sub-text">${data.brand || ''} ${data.model || ''}</div>
-        <div class="sub-text">${data.complaintTypes?.[0] || ''}</div>
+        <div class="main-text">${data.brand || ''} ${data.model || ''}</div>
+        <div class="sub-text">${data.customerName || ''}${data.complaintTypes?.[0] ? ' · ' + data.complaintTypes[0] : ''}</div>
         <div class="price">Est: Rs.${data.estimatedPrice || ''}</div>
         <img class="barcode" src="${barcodeDataUrl}" />
         <div class="label-num">#${labelNumber} · ${data.orderNumber || ''}</div>
@@ -226,16 +224,16 @@ export const printLabel = async (labelData) => {
             line-height: 1.2;
           }
           .sub-text {
-            font-size: 8pt;
-  font-weight: 900;
-  text-align: center;
-  color: #000000;
-  width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.3;
-  -webkit-font-smoothing: antialiased;
+            font-size: 9pt;
+            font-weight: bold;
+            text-align: center;
+            color: #000000;
+            width: 100%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.2;
+            letter-spacing: 0.3pt;
           }
           .price {
             font-size: 11pt;
@@ -249,14 +247,13 @@ export const printLabel = async (labelData) => {
             display: block;
           }
           .label-num {
-            font-size: 7pt;
-  font-weight: 900;
-  color: #000000;
-  text-align: center;
-  width: 100%;
-  line-height: 1.2;
-  letter-spacing: 0.3pt;
-  -webkit-font-smoothing: antialiased;
+            font-size: 8pt;
+            font-weight: bold;
+            color: #000000;
+            text-align: center;
+            width: 100%;
+            line-height: 1.2;
+            letter-spacing: 0.5pt;
           }
         </style>
       </head>
