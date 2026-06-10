@@ -226,15 +226,16 @@ export const printLabel = async (labelData) => {
             line-height: 1.2;
           }
           .sub-text {
-            font-size: 7.5pt;
-            font-weight: 700;
-            text-align: center;
-            color: #111;
-            width: 100%;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            line-height: 1.2;
+            font-size: 8pt;
+  font-weight: 900;
+  text-align: center;
+  color: #000000;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+  -webkit-font-smoothing: antialiased;
           }
           .price {
             font-size: 11pt;
@@ -248,12 +249,14 @@ export const printLabel = async (labelData) => {
             display: block;
           }
           .label-num {
-            font-size: 6.5pt;
-            font-weight: 700;
-            color: #111;
-            text-align: center;
-            width: 100%;
-            line-height: 1;
+            font-size: 7pt;
+  font-weight: 900;
+  color: #000000;
+  text-align: center;
+  width: 100%;
+  line-height: 1.2;
+  letter-spacing: 0.3pt;
+  -webkit-font-smoothing: antialiased;
           }
         </style>
       </head>
