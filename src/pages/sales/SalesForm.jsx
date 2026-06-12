@@ -181,6 +181,16 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
   };
 
   const handleItemChange = (index, field, value) => {
+     if (field === 'itemId' && value !== '') {
+      const currentItemType = formData.items[index]?.type;
+      if (currentItemType === 'Second-hand') {
+        const alreadyAdded = formData.items.some((it, i) => i !== index && it.type === 'Second-hand' && it.itemId === value);
+        if (alreadyAdded) {
+          alert("This device has already been added to the sale.");
+          return;
+        }
+      }
+    }
     setFormData(prev => {
       const newItems = [...prev.items];
       const item = { ...newItems[index] };
