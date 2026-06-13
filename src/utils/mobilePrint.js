@@ -1,7 +1,7 @@
 import JsBarcode from 'jsbarcode'
 import { generateLabelHTML } from './printLabel'
 
-export const PRINT_SERVER_URL = "http://192.168.1.33:3000"
+export const PRINT_SERVER_URL = "http://192.168.1.36:3000"
 
 export const checkPrintServer = async () => {
   try {
