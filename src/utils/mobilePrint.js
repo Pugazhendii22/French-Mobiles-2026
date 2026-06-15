@@ -80,7 +80,7 @@ export const generateMobileLabelHTML = (labelEntry) => {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 189px; height: 95px; overflow: hidden; background: white; }
     .label { width: 189px; height: 95px; padding: 1px 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; font-family: Arial, sans-serif; overflow: hidden; }
-    .shop-name { font-size: 7pt; font-weight: bold; letter-spacing: 0.5pt; text-align: center; width: 100%; line-height: 1.1; }
+    .shop-name { font-size: 9pt; font-weight: bold; letter-spacing: 0.5pt; text-align: center; width: 100%; line-height: 1.1; }
     hr { width: 100%; border: none; border-top: 0.3pt solid black; margin: 0; }
     .main-text { font-size: 8pt; font-weight: bold; text-align: center; width: 100%; line-height: 1.1; }
     .sub-text { font-size: 8pt; font-weight: bold; text-align: center; color: #000000; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; letter-spacing: 0.3pt; }
