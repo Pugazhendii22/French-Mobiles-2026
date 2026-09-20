@@ -12,8 +12,6 @@ export const uploadImageToCloudinary = async (file) => {
 
     const compressedFile = await imageCompression(file, options)
 
-    console.log(`Original: ${(file.size / 1024 / 1024).toFixed(2)}MB → Compressed: ${(compressedFile.size / 1024).toFixed(0)}KB`)
-
     const formData = new FormData()
     formData.append('file', compressedFile)
     formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET)

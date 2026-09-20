@@ -96,5 +96,3 @@ export default defineConfig({
     allowedHosts: true
   }
 })
-
-console.log("🔥 VITE CONFIG LOADED")

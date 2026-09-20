@@ -30,3 +30,6 @@ dist-ssr
 
 # Contact exports - contain personal data, must never be committed or deployed
 *.vcf
+
+# Local editor/agent config
+.claude/
