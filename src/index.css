@@ -1,0 +1,205 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: light;
+
+  --brand: #002395;
+  --brand-dark: #001a6e;
+  --danger: #ED2939;
+
+  /* Notch / home-indicator insets, 0 on devices without them */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* Shell metrics - pages reserve space with these instead of magic numbers */
+  --app-header-h: 56px;
+  --app-nav-h: 64px;
+}
+
+/* ─────────────────────────────────────────────
+   APP SHELL BEHAVIOUR
+   Stops the installed PWA behaving like a browser tab.
+────────────────────────────────────────────── */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f1f5f9;
+  color: #0f172a;
+  /* no pull-to-refresh, no rubber-band scroll chaining */
+  overscroll-behavior-y: none;
+}
+
+body {
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* no grey flash box and no long-press "copy/share" callout on taps */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* App chrome shouldn't be text-selectable; inputs and page copy still are */
+button,
+nav,
+header,
+[role="button"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Removes the 300ms tap delay and double-tap-to-zoom on controls */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+/* Native-style press feedback on touch devices (no sticky hover states) */
+@media (hover: none) {
+  button:active,
+  a:active,
+  [role="button"]:active {
+    transform: scale(0.97);
+    opacity: 0.9;
+  }
+}
+
+button,
+a,
+[role="button"] {
+  transition: transform 120ms ease, opacity 120ms ease, background-color 150ms ease;
+}
+
+/* Keyboard users still get a clear focus ring */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* ─────────────────────────────────────────────
+   FORM CONTROLS
+   16px keeps iOS from zooming the page on focus.
+────────────────────────────────────────────── */
+input,
+select,
+textarea {
+  font-size: 16px !important;
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+}
+
+@media screen and (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+    transform: none !important;
+  }
+}
+
+/* Text, select and date controls each have a different intrinsic height
+   (46 / 47 / 48px), so two fields sitting side by side never lined up. Pin
+   every single-line control to one height - which also guarantees a 48px
+   tap target. Textareas keep their own height. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+select {
+  min-height: 48px;
+}
+
+/* ─────────────────────────────────────────────
+   HELPERS
+────────────────────────────────────────────── */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.pt-safe { padding-top: var(--safe-top); }
+.pb-safe { padding-bottom: var(--safe-bottom); }
+
+/* Full height that follows the mobile URL bar instead of fighting it */
+.h-screen-safe { height: 100dvh; }
+
+/* Space reserved for the fixed bottom bar(s). Collapses on desktop, where the
+   bottom nav is replaced by the sidebar. */
+.pb-app-nav {
+  padding-bottom: calc(var(--app-nav-h) + var(--safe-bottom));
+}
+.pb-app-nav-action {
+  padding-bottom: calc(var(--app-nav-h) + 60px + var(--safe-bottom));
+}
+@media (min-width: 768px) {
+  .pb-app-nav,
+  .pb-app-nav-action {
+    padding-bottom: 0;
+  }
+}
+
+/* Anchors for elements that sit directly above the bottom nav */
+.bottom-app-nav { bottom: calc(var(--app-nav-h) + var(--safe-bottom)); }
+.bottom-app-fab { bottom: calc(var(--app-nav-h) + var(--safe-bottom) + 16px); }
+
+/* ─────────────────────────────────────────────
+   MOTION
+   Short, eased transitions read as "app"; long ones read as "website".
+────────────────────────────────────────────── */
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+.animate-slide-in-left {
+  animation: slideInLeft 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-page-in {
+  animation: pageIn 0.22s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   PRINT
+────────────────────────────────────────────── */
+@media print {
+  body > *:not(#report-print-overlay):not(#print-label-root) {
+    display: none !important;
+  }
+  #report-print-overlay {
+    display: block !important;
+  }
+  #print-label-root {
+    visibility: visible;
+    position: fixed;
+    top: 0;
+    left: 0;
+  }
+}
