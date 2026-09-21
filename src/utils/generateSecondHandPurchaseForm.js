@@ -200,18 +200,6 @@ export const generateSecondHandPurchaseForm = (mobile, shopDetails, seller = {},
           </ol>
         </div>
 
-        <!-- BUY-BACK -->
-        <div class="buyback">
-          <div class="buyback-title">Buy-back option &mdash; ${esc(holdDays)} days</div>
-          <p>
-            The seller may repurchase this device within <strong>${esc(holdDays)} days</strong> of the date
-            above, that is on or before <span class="date">${esc(buyBackBy)}</span>, by repaying the full
-            amount received above together with any repair or refurbishment cost the shop has incurred.
-            After <span class="date">${esc(buyBackBy)}</span> this option lapses automatically and the shop
-            is free to sell the device without any further notice to the seller.
-          </p>
-        </div>
-
         <!-- WARNING -->
         <div class="warning">
           <div class="warning-title">Important notice</div>
