@@ -306,6 +306,11 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
         errors.agreement = 'The seller must sign before the device can be taken in'
         if (!firstErrorRef) firstErrorRef = agreementRef
       }
+    } else if (initialData.sellerSignatureUrl && !signatureData) {
+      // Editing must never quietly strip a signature the seller already gave -
+      // it is the evidence that they agreed to the sale
+      errors.agreement = 'This purchase already has the seller\'s signature. Sign again before saving, or cancel to keep the one on file.'
+      if (!firstErrorRef) firstErrorRef = agreementRef
     }
 
     setFieldErrors(errors)
