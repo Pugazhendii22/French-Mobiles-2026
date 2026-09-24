@@ -90,6 +90,7 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       problemDetails: '',
       imei1: prefillData?.imei1 || initialData?.imei1 || initialData?.imei || '',
       imei2: prefillData?.imei2 || initialData?.imei2 || '',
+      imeiUnavailable: false,
       lockType: 'None',
       lockHint: initialData?.lockHint || initialData?.lockCode || '',
       lockPattern: initialData?.lockPattern || [],
@@ -140,7 +141,10 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       errors.model = 'Model is required'
       if (!firstErrorRef) firstErrorRef = modelRef
     }
-    if (!formData.imei1) {
+    /* A dead phone or a smashed display cannot show its IMEI, and the shop still
+       has to take the device in - so the requirement lifts once staff record why
+       it could not be read. */
+    if (!formData.imei1 && !formData.imeiUnavailable) {
       errors.imei1 = 'IMEI 1 is required'
       if (!firstErrorRef) firstErrorRef = imei1Ref
     }
@@ -712,7 +716,7 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
                     }}
                     onSecondaryChange={val => setFormData(prev => ({ ...prev, imei2: val }))}
                     secondaryLabel="IMEI 2"
-                    required={true}
+                    required={!formData.imeiUnavailable}
                     scannerId="scanner-service-imei1"
                   />
                   <FieldError message={fieldErrors.imei1} />
@@ -730,6 +734,25 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
                     scannerId="scanner-service-imei2"
                   />
                 </div>
+
+                <label className="flex items-start gap-3 p-3 rounded-xl bg-white border border-[#e2e8f0] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!formData.imeiUnavailable}
+                    onChange={e => {
+                      const checked = e.target.checked
+                      setFormData(prev => ({ ...prev, imeiUnavailable: checked }))
+                      if (checked && fieldErrors.imei1) setFieldErrors(prev => ({ ...prev, imei1: '' }))
+                    }}
+                    className="h-5 w-5 text-[#002395] rounded border-gray-300 focus:ring-[#002395] shrink-0 mt-0.5"
+                  />
+                  <span className="text-xs text-[#0f172a] font-medium">
+                    IMEI not readable
+                    <span className="block text-[11px] text-gray-400 font-normal mt-0.5">
+                      Device is dead or the display is damaged
+                    </span>
+                  </span>
+                </label>
 
                 <div>
                   <label className={labelClass}>Device image</label>

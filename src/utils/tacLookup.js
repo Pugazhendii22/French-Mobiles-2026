@@ -13,9 +13,12 @@ import { tacDb } from '../firebase/tacFirebase';
    2. tac_registry in this app's own database - grows over time as staff enter
       brand/model for phones the reference database didn't have. */
 
+/* Returns '' for anything that is not a real IMEI. Padding a blank value out to
+   "00000000" would look like a valid TAC and let a device with no readable IMEI
+   write a junk entry that then autofilled every later scan. */
 const getTacFromImei = (imei) => {
   const digits = String(imei || '').replace(/\D/g, '');
-  return digits.slice(0, 8).padStart(8, '0');
+  return digits.length >= 8 ? digits.slice(0, 8) : '';
 };
 
 const BRAND_CASE = {
@@ -70,7 +73,7 @@ const lookupOwnRegistry = async (tac) => {
 /** Look up brand/model for a scanned IMEI. Returns null if this TAC is unknown to either source. */
 export const lookupTac = async (imei) => {
   const tac = getTacFromImei(imei);
-  if (tac.length < 8) return null;
+  if (!tac) return null;
 
   const fromReference = await lookupReferenceDb(tac);
   if (fromReference?.brand && fromReference?.model) return { tac, ...fromReference };
@@ -93,7 +96,7 @@ export const lookupTac = async (imei) => {
  */
 export const recordTacIfNew = async (imei, brand, model, uid) => {
   const tac = getTacFromImei(imei);
-  if (tac.length < 8 || !brand || !model) return;
+  if (!tac || !brand || !model) return;
 
   const known = await lookupTac(imei);
   if (known) return;
