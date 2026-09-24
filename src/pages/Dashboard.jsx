@@ -80,6 +80,14 @@ const Dashboard = () => {
         const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const endToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
+        const isAdminRole = userRole?.toLowerCase() === 'admin';
+        // Staff can only list tasks assigned to them (see MyTasks.jsx) - an
+        // unfiltered query is rejected by the Firestore rules for non-admins,
+        // which used to fail the whole Promise.all and leave every stat blank.
+        const tasksQuery = isAdminRole
+          ? collection(db, 'tasks')
+          : query(collection(db, 'tasks'), where('assignedTo', '==', currentUser?.uid || '__none__'));
+
         // Fetch all data in parallel for better performance
         const [
           salesSnap,
@@ -101,7 +109,7 @@ const Dashboard = () => {
             where('createdAt', '>=', startToday.toISOString())
           )),
           getDocs(collection(db, 'enquiries')),
-          getDocs(collection(db, 'tasks'))
+          getDocs(tasksQuery)
         ]);
 
         const newStats = {

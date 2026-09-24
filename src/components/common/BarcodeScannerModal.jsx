@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 
 // The camera re-reads the same barcode every frame, so ignore repeats for this long.
 // Typed / wedge-scanner entry is a deliberate action and is never de-duplicated.
@@ -17,7 +17,8 @@ const BarcodeScannerModal = ({
   title = 'Scan Barcode',
   hint = 'Point the camera at the barcode on the label',
   onScan,
-  onClose
+  onClose,
+  secondaryAction
 }) => {
   const [cameraError, setCameraError] = useState('');
   const [starting, setStarting] = useState(true);
@@ -85,10 +86,10 @@ const BarcodeScannerModal = ({
     if (!open) return undefined;
 
     let cancelled = false;
-    const scanner = new Html5Qrcode(readerId, {
-      formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128],
-      verbose: false
-    });
+    // No formatsToSupport restriction - shop labels print CODE_128, but a
+    // device's own factory IMEI sticker is often CODE_39 or another linear
+    // format, so we accept whatever the camera can decode.
+    const scanner = new Html5Qrcode(readerId, { verbose: false });
     scannerRef.current = scanner;
 
     scanner
@@ -240,6 +241,16 @@ const BarcodeScannerModal = ({
               A USB / bluetooth barcode scanner also types straight into this box.
             </p>
           </div>
+
+          {secondaryAction && (
+            <button
+              type="button"
+              onClick={secondaryAction.onClick}
+              className="w-full bg-white text-[#002395] rounded-xl py-2.5 text-sm font-bold"
+            >
+              {secondaryAction.label}
+            </button>
+          )}
 
           <button
             type="button"

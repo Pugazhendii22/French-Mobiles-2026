@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/firebase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Layout from '../../components/common/Layout';
 import SecondHandForm from './SecondHandForm';
 import { useAuth } from '../../context/AuthContext';
@@ -11,16 +11,22 @@ import { imageThumb } from '../../utils/imageUrl';
 const SecondHandList = () => {
   const { userRole } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  /* Arriving from the scanner carries the scanned device in router state.
+     Seeded at mount so the prefilled form is open on the first render rather
+     than flashing the list first. */
+  const [prefillData, setPrefillData] = useState(() => location.state || null);
   const [mobiles, setMobiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal] = useState(() => !!location.state);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [whatsAppDialog, setWhatsAppDialog] = useState({ open: false });
 
   const fetchMobiles = async () => {
     try {
@@ -34,6 +40,11 @@ const SecondHandList = () => {
 
   useEffect(() => { fetchMobiles(); }, []);
 
+  // Drop the router state so going back or refreshing does not reopen the form.
+  useEffect(() => {
+    if (location.state) window.history.replaceState({}, document.title);
+  }, [location.state]);
+
   const handleSaveMobile = async (data) => {
     const newMobile = { ...data, updatedAt: new Date().toISOString() };
     if (data.id) {
@@ -45,6 +56,14 @@ const SecondHandList = () => {
     newMobile.createdAt = new Date().toISOString();
     const docRef = await addDoc(collection(db, 'second_hand_mobiles'), newMobile);
     fetchMobiles();
+
+    const phone = (data.sellerPhone || data.sellerAlternatePhone || '').replace(/\D/g, '');
+    if (phone) {
+      const price = Number(data.purchasePrice || 0).toLocaleString('en-IN');
+      const message = `Hi ${data.sellerName || ''}, thank you for handing over your ${data.brand} ${data.model} to French Mobiles. We have received it and paid Rs.${price} in full as agreed. This is a final sale - the device will not be returned. - French Mobiles`;
+      setWhatsAppDialog({ open: true, phone, message, sellerName: data.sellerName });
+    }
+
     return docRef.id;
   };
 
@@ -322,7 +341,11 @@ const SecondHandList = () => {
         )}
 
         {showModal && (
-          <SecondHandForm onSave={handleSaveMobile} onCancel={() => setShowModal(false)} />
+          <SecondHandForm
+            prefillData={prefillData}
+            onSave={handleSaveMobile}
+            onCancel={() => { setShowModal(false); setPrefillData(null); }}
+          />
         )}
         <ConfirmDeleteModal
           isOpen={!!deleteTarget}
@@ -332,6 +355,53 @@ const SecondHandList = () => {
           title="Delete Mobile"
           message="Are you sure you want to delete this mobile? This action cannot be undone."
         />
+
+        {/* ── WHATSAPP PURCHASE CONFIRMATION ── */}
+        {whatsAppDialog.open && (
+          <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center animate-fade-in">
+            <div className="bg-white w-full md:max-w-lg md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col max-h-[90dvh] overflow-hidden pb-safe">
+              <div className="md:hidden flex justify-center pt-2.5 pb-1 flex-shrink-0">
+                <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
+              </div>
+              <div className="flex-shrink-0 px-4 pt-2 pb-3 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-[#0f172a]">Send WhatsApp Confirmation</h2>
+                  <p className="text-xs text-gray-400">
+                    To <span className="font-bold text-[#002395]">{whatsAppDialog.sellerName || 'seller'}</span>
+                  </p>
+                </div>
+                <button onClick={() => setWhatsAppDialog({ open: false })} className="w-10 h-10 rounded-full flex items-center justify-center text-gray-400" aria-label="Close">
+                  <i className="fas fa-times text-lg"></i>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+                <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-sm text-gray-700 whitespace-pre-wrap">
+                  {whatsAppDialog.message}
+                </div>
+                <a href={`tel:${whatsAppDialog.phone}`} className="text-xs text-green-600 font-semibold">
+                  Sending to {whatsAppDialog.phone}
+                </a>
+              </div>
+              <div className="flex-shrink-0 px-4 py-3 border-t border-gray-100 flex gap-2">
+                <button
+                  onClick={() => setWhatsAppDialog({ open: false })}
+                  className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-3 text-sm font-bold"
+                >
+                  Skip
+                </button>
+                <a
+                  href={`https://wa.me/91${whatsAppDialog.phone}?text=${encodeURIComponent(whatsAppDialog.message)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => setWhatsAppDialog({ open: false })}
+                  className="flex-[2] bg-green-600 text-white rounded-xl py-3 text-sm font-bold flex items-center justify-center gap-2"
+                >
+                  <i className="fab fa-whatsapp text-lg"></i> Send
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );

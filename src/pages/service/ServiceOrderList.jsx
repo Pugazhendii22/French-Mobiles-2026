@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, doc, updateDoc, query, where, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebase/firebase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Layout from '../../components/common/Layout';
 import ServiceOrderForm from './ServiceOrderForm';
 import { useAuth } from '../../context/AuthContext';
@@ -17,6 +17,11 @@ import { describeFirebaseError } from '../../utils/firebaseError';
 const ServiceOrderList = () => {
   const { currentUser, userName, userRole } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  /* Arriving from the scanner carries the scanned device in router state.
+     Seeded at mount so the prefilled form is open on the first render rather
+     than flashing the list first. */
+  const [prefillData, setPrefillData] = useState(() => location.state || null);
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,7 +30,7 @@ const ServiceOrderList = () => {
   const [activeTab, setActiveTab] = useState('All');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal] = useState(() => !!location.state);
 
   const { preDeliveryChecklist = [] } = useSettings();
   const [completeModalOpen, setCompleteModalOpen] = useState(false);
@@ -93,6 +98,11 @@ const ServiceOrderList = () => {
     };
     loadInitialData();
   }, []);
+
+  // Drop the router state so going back or refreshing does not reopen the form.
+  useEffect(() => {
+    if (location.state) window.history.replaceState({}, document.title);
+  }, [location.state]);
 
   const generateOrderNumber = () =>
     nextDailyNumber({
@@ -712,7 +722,11 @@ const ServiceOrderList = () => {
         )}
 
         {showModal && (
-          <ServiceOrderForm onSave={handleSaveOrder} onCancel={() => setShowModal(false)} />
+          <ServiceOrderForm
+            prefillData={prefillData}
+            onSave={handleSaveOrder}
+            onCancel={() => { setShowModal(false); setPrefillData(null); }}
+          />
         )}
 
         {/* ── RATING LINK ── */}

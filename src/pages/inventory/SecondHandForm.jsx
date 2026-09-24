@@ -13,6 +13,7 @@ import { generateSecondHandPurchaseForm } from '../../utils/generateSecondHandPu
 import SignaturePad from '../../components/common/SignaturePad';
 import { imageThumb } from '../../utils/imageUrl';
 import { loadCustomers, invalidateCustomers } from '../../utils/customerCache';
+import { recordTacIfNew } from '../../utils/tacLookup';
 
 const generateSerialNumber = () => {
   const date = new Date()
@@ -120,9 +121,31 @@ const GRADE_META = {
   D: { label: 'Damaged', on: 'bg-[#ED2939] border-[#ED2939]' },
 };
 
-const SecondHandForm = ({ initialData, onSave, onCancel }) => {
+const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
   const { currentUser } = useAuth();
-  const { deviceChecklist, complaintTypes, shopDetails, purchaseTerms } = useSettings();
+  const {
+    deviceChecklist, complaintTypes, shopDetails, purchaseTerms,
+    brands: brandOptions = [], models: modelOptions = {},
+    ramOptions = [], romOptions = []
+  } = useSettings();
+  const MODELS = modelOptions;
+
+  /* A scan-to-create flow (see ScannerPage) may hand us a recognised brand/model
+     from the TAC database - only relevant for a brand-new record. The TAC data
+     covers brands the shop's own dropdown does not list, so a scanned brand that
+     is missing from it is offered as an extra option rather than being forced
+     through the "Other" free-text fallback. */
+  const scannedBrand = (!initialData && prefillData?.brand) || '';
+  const prefillBrandMatch = scannedBrand
+    ? brandOptions.find(b => b.toLowerCase() === scannedBrand.toLowerCase())
+    : null;
+  const BRANDS = scannedBrand && !prefillBrandMatch
+    ? [...brandOptions, scannedBrand]
+    : brandOptions;
+  const prefillBrand = prefillBrandMatch || scannedBrand;
+  const prefillModelMatch = !initialData && prefillData?.model && prefillBrand
+    ? (MODELS[prefillBrand] || []).find(m => m.toLowerCase() === prefillData.model.toLowerCase())
+    : null;
 
   const getChecklistForBrand = (selectedBrand) => {
     const isApple = selectedBrand?.toLowerCase() === 'apple'
@@ -163,13 +186,13 @@ const SecondHandForm = ({ initialData, onSave, onCancel }) => {
     const initialCondition = base.condition || (manualOverride ? base.condition : autoGrade);
 
     return {
-      brand: base.brand || '',
-      customBrand: base.customBrand || '',
-      model: base.model || '',
+      brand: initialData ? (base.brand || '') : prefillBrand,
+      customBrand: initialData ? (base.customBrand || '') : '',
+      model: initialData ? (base.model || '') : (prefillModelMatch || prefillData?.model || ''),
       ram: base.ram || '',
       rom: base.rom || '',
-      imei1: base.imei1 || '',
-      imei2: base.imei2 || '',
+      imei1: initialData ? (base.imei1 || '') : (prefillData?.imei1 || ''),
+      imei2: initialData ? (base.imei2 || '') : (prefillData?.imei2 || ''),
       serialNumber: base.serialNumber || '',
       purchasePrice: base.purchasePrice || '',
       salePrice: base.salePrice || '',
@@ -217,8 +240,12 @@ const SecondHandForm = ({ initialData, onSave, onCancel }) => {
   const [localId, setLocalId] = useState(initialData?.id || null);
   const [saveStatus, setSaveStatus] = useState('idle');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [customModel, setCustomModel] = useState('');
-  const [isCustomModel, setIsCustomModel] = useState(false);
+  const [customModel, setCustomModel] = useState(
+    () => (!initialData && prefillData?.model && !prefillModelMatch) ? prefillData.model : ''
+  );
+  const [isCustomModel, setIsCustomModel] = useState(
+    () => !!(!initialData && prefillData?.model && !prefillModelMatch)
+  );
   const [conditionChecklist, setConditionChecklist] = useState({});
   const [brandInitialized, setBrandInitialized] = useState(false);
   const [showPrinterSelector, setShowPrinterSelector] = useState(false);
@@ -373,9 +400,6 @@ const SecondHandForm = ({ initialData, onSave, onCancel }) => {
     }
   };
 
-  const { brands: brandOptions = [], models: modelOptions = {}, ramOptions = [], romOptions = [] } = useSettings();
-  const BRANDS = brandOptions;
-  const MODELS = modelOptions;
 
   const handleUploadPhoto = async (file, fieldName) => {
     if (!file) return;
@@ -468,6 +492,10 @@ const SecondHandForm = ({ initialData, onSave, onCancel }) => {
       }
       delete finalData.customBrand;
 
+      if (!initialData) {
+        recordTacIfNew(finalData.imei1, finalData.brand, finalData.model, currentUser?.uid);
+      }
+
       if (localId) {
         finalData.id = localId;
       }
@@ -503,6 +531,10 @@ const SecondHandForm = ({ initialData, onSave, onCancel }) => {
         finalData.brand = finalData.customBrand;
       }
       delete finalData.customBrand;
+
+      if (!initialData) {
+        recordTacIfNew(finalData.imei1, finalData.brand, finalData.model, currentUser?.uid);
+      }
 
       if (localId) {
         finalData.id = localId;
@@ -826,14 +858,32 @@ const SecondHandForm = ({ initialData, onSave, onCancel }) => {
           <Section icon="fa-barcode" title="IMEI & Serial" hint="Scan or type the device numbers">
             <div className="space-y-3">
               <div ref={imei1Ref}>
-                <ImeiInput label="IMEI 1" value={formData.imei1} onChange={val => {
-                  setFormData({ ...formData, imei1: val })
-                  if (fieldErrors.imei1) setFieldErrors(prev => ({...prev, imei1: ''}))
-                }} required={true} scannerId="scanner-secondhand-imei1" />
+                <ImeiInput
+                  label="IMEI 1"
+                  value={formData.imei1}
+                  onChange={val => {
+                    setFormData(prev => ({ ...prev, imei1: val }))
+                    if (fieldErrors.imei1) setFieldErrors(prev => ({...prev, imei1: ''}))
+                  }}
+                  onSecondaryChange={val => setFormData(prev => ({ ...prev, imei2: val }))}
+                  secondaryLabel="IMEI 2"
+                  required={true}
+                  scannerId="scanner-secondhand-imei1"
+                />
                 <FieldError message={fieldErrors.imei1} />
               </div>
               <div>
-                <ImeiInput label="IMEI 2 (optional)" value={formData.imei2} onChange={val => setFormData({ ...formData, imei2: val })} scannerId="scanner-secondhand-imei2" />
+                <ImeiInput
+                  label="IMEI 2 (optional)"
+                  value={formData.imei2}
+                  onChange={val => setFormData(prev => ({ ...prev, imei2: val }))}
+                  onSecondaryChange={val => {
+                    setFormData(prev => ({ ...prev, imei1: val }))
+                    if (fieldErrors.imei1) setFieldErrors(prev => ({...prev, imei1: ''}))
+                  }}
+                  secondaryLabel="IMEI 1"
+                  scannerId="scanner-secondhand-imei2"
+                />
               </div>
               <div>
                 <label className={labelClass}>

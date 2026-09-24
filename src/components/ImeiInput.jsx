@@ -1,10 +1,27 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 
-const ImeiInput = ({ value, onChange, label, placeholder = '', required = false, scannerId }) => {
+/* When onSecondaryChange is supplied, a single scan session captures both
+   IMEIs one after another - the camera stays open after the first barcode so
+   the second can be scanned immediately, instead of closing and requiring the
+   other field's own scan button to be opened separately. */
+const ImeiInput = ({
+  value, onChange, label, placeholder = '', required = false, scannerId,
+  onSecondaryChange, secondaryLabel
+}) => {
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanMessage, setScanMessage] = useState('');
   const html5QrcodeRef = useRef(null);
   const isRunningRef = useRef(false);
+  const firstCapturedRef = useRef(null);
+
+  const canCaptureBoth = typeof onSecondaryChange === 'function';
+
+  // Kept fresh without restarting the camera when the parent re-renders.
+  const onChangeRef = useRef(onChange);
+  const onSecondaryChangeRef = useRef(onSecondaryChange);
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+  useEffect(() => { onSecondaryChangeRef.current = onSecondaryChange; }, [onSecondaryChange]);
 
   const stopScanner = useCallback(() => {
     if (html5QrcodeRef.current && isRunningRef.current) {
@@ -49,8 +66,20 @@ const ImeiInput = ({ value, onChange, label, placeholder = '', required = false,
           { facingMode: 'environment' },
           { fps: 10, qrbox: { width: 250, height: 100 } },
           (decodedText) => {
-            stopScanner();
-            onChange(decodedText);
+            if (firstCapturedRef.current === null) {
+              firstCapturedRef.current = decodedText;
+              onChangeRef.current(decodedText);
+              if (canCaptureBoth) {
+                setScanMessage(`Captured. Now scan ${secondaryLabel || 'the other IMEI'}, or tap Done.`);
+              } else {
+                stopScanner();
+              }
+            } else {
+              // Ignore re-detecting the same barcode still in frame.
+              if (decodedText === firstCapturedRef.current) return;
+              onSecondaryChangeRef.current?.(decodedText);
+              stopScanner();
+            }
           },
           () => {}
         ).then(() => {
@@ -65,7 +94,7 @@ const ImeiInput = ({ value, onChange, label, placeholder = '', required = false,
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [scannerOpen, scannerId, onChange, stopScanner]);
+  }, [scannerOpen, scannerId, canCaptureBoth, secondaryLabel, stopScanner]);
 
   useEffect(() => {
     const handleEsc = (e) => {
@@ -100,7 +129,11 @@ const ImeiInput = ({ value, onChange, label, placeholder = '', required = false,
         />
         <button
           type="button"
-          onClick={() => setScannerOpen(true)}
+          onClick={() => {
+            firstCapturedRef.current = null;
+            setScanMessage('');
+            setScannerOpen(true);
+          }}
           className="bg-slate-100 border p-2 rounded text-slate-700 hover:bg-slate-200 break-words"
         >
           <i className="fas fa-barcode" aria-hidden="true" />
@@ -116,9 +149,15 @@ const ImeiInput = ({ value, onChange, label, placeholder = '', required = false,
               <button type="button" onClick={stopScanner} className="text-gray-500 hover:text-gray-700">✕</button>
             </div>
             <div id={scannerId} className="w-full min-h-48 rounded-xl bg-slate-100 break-words" />
-            <p className="mt-3 text-sm text-gray-600">Point camera at IMEI barcode</p>
+            <p className="mt-3 text-sm text-gray-600">
+              {scanMessage || (canCaptureBoth
+                ? 'Point camera at either IMEI barcode - both can be scanned one after the other'
+                : 'Point camera at IMEI barcode')}
+            </p>
             <div className="mt-4 text-right">
-              <button type="button" onClick={stopScanner} className="px-4 py-2 bg-slate-100 rounded-md text-slate-800 hover:bg-slate-200 break-words">Cancel</button>
+              <button type="button" onClick={stopScanner} className="px-4 py-2 bg-slate-100 rounded-md text-slate-800 hover:bg-slate-200 break-words">
+                {scanMessage ? 'Done' : 'Cancel'}
+              </button>
             </div>
           </div>
         </div>

@@ -14,6 +14,7 @@ import { generateServiceJobCard } from '../../utils/generateServiceJobCard';
 import PrinterSelector from '../../components/PrinterSelector';
 import { imageThumb } from '../../utils/imageUrl';
 import { loadCustomers } from '../../utils/customerCache';
+import { recordTacIfNew } from '../../utils/tacLookup';
 
 const PatternLock = lazy(() => import('../../components/PatternLock').catch(() => ({ default: () => <div className="text-red-500">Failed to load PatternLock</div> })));
 
@@ -26,19 +27,40 @@ const generateSerialNumber = () => {
   return `FM-${dateStr}-${random}`
 }
 
-const ServiceOrderForm = ({ initialData, onSave, onCancel }) => {
+const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
   const { currentUser, userName, userRole } = useAuth();
   const { complaintTypes: complaintTypeOptions = [], accessories: accessoryOptions = [], brands: brandOptions = [], models: modelOptions = {}, shopDetails } = useSettings();
   const [staffOptions, setStaffOptions] = useState([]);
-  const [customModel, setCustomModel] = useState('');
-  const [isCustomModel, setIsCustomModel] = useState(false);
 
   const LOCK_TYPES = ['None', 'PIN', 'Password', 'Pattern', 'Fingerprint', 'Face Unlock', 'Other'];
   const ACCESSORIES_OPTIONS = accessoryOptions;
-  const BRANDS = brandOptions;
   const MODELS = modelOptions;
   const COMPLAINTS = complaintTypeOptions;
   const STATUSES = ['Received', 'In Progress', 'Parts Awaiting', 'Completed', 'Awaiting Customer Approval', 'Returned'];
+
+  /* A scan-to-create flow (see ScannerPage) may hand us a recognised brand/model
+     from the TAC database - only relevant for a brand-new record. The TAC data
+     covers brands the shop's own dropdown does not list, so a scanned brand that
+     is missing from it is offered as an extra option rather than being forced
+     through the "Other" free-text fallback. */
+  const scannedBrand = (!initialData && prefillData?.brand) || '';
+  const prefillBrandMatch = scannedBrand
+    ? brandOptions.find(b => b.toLowerCase() === scannedBrand.toLowerCase())
+    : null;
+  const BRANDS = scannedBrand && !prefillBrandMatch
+    ? [...brandOptions, scannedBrand]
+    : brandOptions;
+  const prefillBrand = prefillBrandMatch || scannedBrand;
+  const prefillModelMatch = !initialData && prefillData?.model && prefillBrand
+    ? (MODELS[prefillBrand] || []).find(m => m.toLowerCase() === prefillData.model.toLowerCase())
+    : null;
+
+  const [customModel, setCustomModel] = useState(
+    () => (!initialData && prefillData?.model && !prefillModelMatch) ? prefillData.model : ''
+  );
+  const [isCustomModel, setIsCustomModel] = useState(
+    () => !!(!initialData && prefillData?.model && !prefillModelMatch)
+  );
 
   const formatDateTimeLocal = (value) => {
     if (!value) return '';
@@ -61,13 +83,13 @@ const ServiceOrderForm = ({ initialData, onSave, onCancel }) => {
       customerName: '',
       customerPhone: '',
       alternatePhone: '',
-      brand: '',
+      brand: prefillBrand,
       customBrand: '',
-      model: '',
+      model: prefillModelMatch || prefillData?.model || '',
       colour: '',
       problemDetails: '',
-      imei1: initialData?.imei1 || initialData?.imei || '',
-      imei2: initialData?.imei2 || '',
+      imei1: prefillData?.imei1 || initialData?.imei1 || initialData?.imei || '',
+      imei2: prefillData?.imei2 || initialData?.imei2 || '',
       lockType: 'None',
       lockHint: initialData?.lockHint || initialData?.lockCode || '',
       lockPattern: initialData?.lockPattern || [],
@@ -316,6 +338,10 @@ const ServiceOrderForm = ({ initialData, onSave, onCancel }) => {
         finalData.otherComplaint = '';
       }
 
+      if (!initialData) {
+        recordTacIfNew(finalData.imei1, finalData.brand, finalData.model, currentUser?.uid);
+      }
+
       if (userRole?.toLowerCase() === 'staff') {
         finalData.technicianName = userName || currentUser?.displayName || currentUser?.email || '';
         finalData.technicianUid = currentUser?.uid || '';
@@ -369,6 +395,10 @@ const ServiceOrderForm = ({ initialData, onSave, onCancel }) => {
       delete finalData.imei;
       if (!finalData.complaintTypes.includes('Other')) {
         finalData.otherComplaint = '';
+      }
+
+      if (!initialData) {
+        recordTacIfNew(finalData.imei1, finalData.brand, finalData.model, currentUser?.uid);
       }
 
       if (userRole?.toLowerCase() === 'staff') {
@@ -677,9 +707,11 @@ const ServiceOrderForm = ({ initialData, onSave, onCancel }) => {
                     label="IMEI 1"
                     value={formData.imei1}
                     onChange={val => {
-                      setFormData({ ...formData, imei1: val })
+                      setFormData(prev => ({ ...prev, imei1: val }))
                       if (fieldErrors.imei1) setFieldErrors(prev => ({...prev, imei1: ''}))
                     }}
+                    onSecondaryChange={val => setFormData(prev => ({ ...prev, imei2: val }))}
+                    secondaryLabel="IMEI 2"
                     required={true}
                     scannerId="scanner-service-imei1"
                   />
@@ -689,7 +721,12 @@ const ServiceOrderForm = ({ initialData, onSave, onCancel }) => {
                   <ImeiInput
                     label="IMEI 2 (optional)"
                     value={formData.imei2}
-                    onChange={val => setFormData({ ...formData, imei2: val })}
+                    onChange={val => setFormData(prev => ({ ...prev, imei2: val }))}
+                    onSecondaryChange={val => {
+                      setFormData(prev => ({ ...prev, imei1: val }))
+                      if (fieldErrors.imei1) setFieldErrors(prev => ({...prev, imei1: ''}))
+                    }}
+                    secondaryLabel="IMEI 1"
                     scannerId="scanner-service-imei2"
                   />
                 </div>
