@@ -5,6 +5,7 @@ import { db } from '../firebase/firebase';
 import { collection, getDocs, getCountFromServer, query, where } from 'firebase/firestore';
 import Layout from '../components/common/Layout';
 import { Section, EmptyState } from '../components/common/ui';
+import { describeFirebaseError } from '../utils/firebaseError';
 
 /* Compact tappable tile - the unit the whole stat grid is built from.
    Defined at module level so it is not recreated on every render. */
@@ -35,6 +36,10 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
+  /* A failed fetch used to leave every tile reading zero with no explanation,
+     which looks identical whether the cause is a quota limit, a rules change or
+     no connection. Say which it is instead. */
+  const [loadError, setLoadError] = useState('');
 
   const [stats, setStats] = useState({
     salesTodayAmt: 0,
@@ -205,6 +210,7 @@ const Dashboard = () => {
 
       } catch (err) {
         console.error("Dashboard fetch error:", err);
+        setLoadError(describeFirebaseError(err));
       } finally {
         setLoading(false);
       }
@@ -248,6 +254,19 @@ const Dashboard = () => {
           </h1>
           <p className="text-xs text-gray-400 mt-0.5">{formattedDate}</p>
         </div>
+
+        {/* ── LOAD FAILURE ── */}
+        {loadError && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
+            <p className="text-sm font-bold text-[#ED2939]">
+              <i className="fas fa-exclamation-circle mr-2"></i>Could not load your data
+            </p>
+            <p className="text-xs text-[#7a1520] mt-1 leading-relaxed">{loadError}</p>
+            <p className="text-[11px] text-gray-500 mt-1.5">
+              The figures below are not accurate until this is fixed.
+            </p>
+          </div>
+        )}
 
         {/* ── ALERTS ── */}
         {!loading && isAdmin && stats.overdueOrders > 0 && (

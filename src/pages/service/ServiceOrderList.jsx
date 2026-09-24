@@ -69,6 +69,7 @@ const ServiceOrderList = () => {
   const [deleteWarning, setDeleteWarning] = useState('');
   const [whatsAppDialog, setWhatsAppDialog] = useState({ open: false });
   const [showFilters, setShowFilters] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   const STATUSES = ['Received', 'In Progress', 'Parts Awaiting', 'Completed', 'Awaiting Customer Approval', 'Returned'];
 
@@ -87,6 +88,7 @@ const ServiceOrderList = () => {
       setOrders(list);
     } catch (err) {
       console.error(err);
+      setLoadError(describeFirebaseError(err));
     } finally {
       setLoading(false);
     }
@@ -475,6 +477,15 @@ const ServiceOrderList = () => {
   return (
     <Layout title="Service Orders" pageType="list" fab={fab}>
       <div className="max-w-3xl mx-auto space-y-3">
+
+        {loadError && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
+            <p className="text-sm font-bold text-[#ED2939]">
+              <i className="fas fa-exclamation-circle mr-2"></i>Could not load service orders
+            </p>
+            <p className="text-xs text-[#7a1520] mt-1 leading-relaxed">{loadError}</p>
+          </div>
+        )}
 
         <SearchBar
           value={searchQuery}

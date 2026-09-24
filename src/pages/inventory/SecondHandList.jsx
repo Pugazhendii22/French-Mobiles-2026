@@ -7,6 +7,7 @@ import SecondHandForm from './SecondHandForm';
 import { useAuth } from '../../context/AuthContext';
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
 import { imageThumb } from '../../utils/imageUrl';
+import { describeFirebaseError } from '../../utils/firebaseError';
 
 const SecondHandList = () => {
   const { userRole } = useAuth();
@@ -27,6 +28,7 @@ const SecondHandList = () => {
   const [deleting, setDeleting] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [whatsAppDialog, setWhatsAppDialog] = useState({ open: false });
+  const [loadError, setLoadError] = useState('');
 
   const fetchMobiles = async () => {
     try {
@@ -35,7 +37,10 @@ const SecondHandList = () => {
       snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
       list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setMobiles(list);
-    } catch (err) { console.error(err); } finally { setLoading(false); }
+    } catch (err) {
+      console.error(err);
+      setLoadError(describeFirebaseError(err));
+    } finally { setLoading(false); }
   };
 
   useEffect(() => { fetchMobiles(); }, []);
@@ -137,6 +142,15 @@ const SecondHandList = () => {
   return (
     <Layout title="Second-Hand Inventory" pageType="list" fab={fab}>
       <div className="max-w-3xl mx-auto space-y-3">
+
+        {loadError && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
+            <p className="text-sm font-bold text-[#ED2939]">
+              <i className="fas fa-exclamation-circle mr-2"></i>Could not load the stock list
+            </p>
+            <p className="text-xs text-[#7a1520] mt-1 leading-relaxed">{loadError}</p>
+          </div>
+        )}
 
         {/* ── SEARCH ── */}
         <div className="relative">
