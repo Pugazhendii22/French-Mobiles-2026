@@ -125,15 +125,14 @@ const DEFAULT_SETTINGS = {
       "The shop will not take responsibility for orders/devices not collected within 30 days.",
       "By agreeing, you allow our company to use your personal details such as your name, phone number, and IMEI number for Customer Support, Service Improvement, and Surveys, while keeping your data safe under Privacy Laws."
     ],
-    purchase_hold_days: 7,
     purchase_terms: [
       "I am the lawful owner of the device described above and I am legally entitled to sell it.",
       "The device is not stolen or lost, has not been obtained by unlawful means, and is not the subject of any police complaint, FIR, or court proceeding.",
       "The device is free from any loan, EMI, hypothecation, insurance claim, or third-party claim.",
       "I have removed all my personal data, signed out of all accounts (Google / iCloud / Mi / Samsung and any others), and removed every screen lock and activation lock.",
       "I have handed over the device voluntarily for the amount stated above, and I confirm I have received that amount in full.",
-      "Ownership of the device passes to the shop on receipt of the above payment.",
-      "Once the buy-back period stated below has passed, the shop may repair, refurbish, resell or otherwise deal with the device without any further notice or consent from me, and I will have no claim over it.",
+      "Ownership of the device passes to the shop on receipt of the above payment. This is a final sale - once I hand over the device, it will not be returned to me under any circumstances, and there is no buy-back option.",
+      "The shop may repair, refurbish, resell or otherwise deal with the device immediately after purchase, without any further notice or consent from me, and I will have no claim over it.",
       "I will indemnify the shop against any loss, claim, or legal action arising from any prior ownership of the device, any defect in title, or any use of the device before this sale.",
       "I have produced valid government photo identification, a copy of which is attached to this form."
     ],
@@ -305,8 +304,7 @@ export const SettingsProvider = ({ children }) => {
         ramOptions: settings.ram_options?.items || ["2GB", "3GB", "4GB", "6GB", "8GB", "12GB", "16GB"],
         romOptions: settings.rom_options?.items || ["16GB", "32GB", "64GB", "128GB", "256GB", "512GB"],
         deviceChecklist: settings.device_checklist || { common: [], iphone: [], android: [] },
-        purchaseTerms: (settings.shop_details?.purchase_terms) || DEFAULT_SETTINGS.shop_details.purchase_terms,
-        purchaseHoldDays: settings.shop_details?.purchase_hold_days ?? DEFAULT_SETTINGS.shop_details.purchase_hold_days
+        purchaseTerms: (settings.shop_details?.purchase_terms) || DEFAULT_SETTINGS.shop_details.purchase_terms
       }}
     >
       {children}

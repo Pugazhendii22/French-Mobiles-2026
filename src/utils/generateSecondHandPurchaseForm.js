@@ -4,8 +4,8 @@
    Printed when the shop takes a device in from a customer. It records who
    handed the device over, proof of their identity, the exact device, the money
    paid, and - the point of the whole form - a signed declaration that they own
-   it and that ownership passes to the shop, with a stated window in which they
-   may buy it back before the shop is free to sell.
+   it and that ownership passes to the shop outright: this is a final sale, and
+   once the device is handed over it will not be returned to the seller.
 
    The wording here is a starting template. It is not legal advice; have a local
    advocate review and adjust it, and edit the clauses in Settings.
@@ -17,8 +17,8 @@ const DEFAULT_PURCHASE_TERMS = [
   'The device is free from any loan, EMI, hypothecation, insurance claim, or third-party claim.',
   'I have removed all my personal data, signed out of all accounts (Google / iCloud / Mi / Samsung and any others), and removed every screen lock and activation lock.',
   'I have handed over the device voluntarily for the amount stated above, and I confirm I have received that amount in full.',
-  'Ownership of the device passes to the shop on receipt of the above payment.',
-  'Once the buy-back period stated below has passed, the shop may repair, refurbish, resell or otherwise deal with the device without any further notice or consent from me, and I will have no claim over it.',
+  'Ownership of the device passes to the shop on receipt of the above payment. This is a final sale - once I hand over the device, it will not be returned to me under any circumstances, and there is no buy-back option.',
+  'The shop may repair, refurbish, resell or otherwise deal with the device immediately after purchase, without any further notice or consent from me, and I will have no claim over it.',
   'I will indemnify the shop against any loss, claim, or legal action arising from any prior ownership of the device, any defect in title, or any use of the device before this sale.',
   'I have produced valid government photo identification, a copy of which is attached to this form.',
 ]
@@ -41,13 +41,6 @@ const fmtDateTime = (value) => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('en-IN')
 }
 
-const addDays = (value, days) => {
-  const d = value?.toDate ? value.toDate() : new Date(value || Date.now())
-  if (Number.isNaN(d.getTime())) return ''
-  d.setDate(d.getDate() + Number(days || 0))
-  return d.toLocaleDateString('en-IN')
-}
-
 /** Value if present, otherwise a ruled blank to fill in by hand. */
 const orBlank = (value, width = '100%') =>
   value
@@ -60,10 +53,8 @@ export const generateSecondHandPurchaseForm = (mobile, shopDetails, seller = {},
   const terms = (shop.purchase_terms && shop.purchase_terms.length)
     ? shop.purchase_terms
     : DEFAULT_PURCHASE_TERMS
-  const holdDays = Number(shop.purchase_hold_days ?? 7)
 
   const purchaseDate = m.purchaseDate || m.createdAt
-  const buyBackBy = addDays(purchaseDate, holdDays)
 
   const row = (label, value, width) =>
     `<div class="field"><span class="lbl">${label}</span>${orBlank(value, width)}</div>`
@@ -88,7 +79,7 @@ export const generateSecondHandPurchaseForm = (mobile, shopDetails, seller = {},
         .doc-title h1 { font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; }
         .doc-title .sub { font-size: 9px; color: #555; margin-top: 2px; }
 
-        .section { margin-top: 9px; }
+        .section { margin-top: 7px; }
         .section-title { font-size: 10px; font-weight: bold; color: #002395; text-transform: uppercase;
                          letter-spacing: 0.5px; border-bottom: 1px solid #002395; padding-bottom: 2px; margin-bottom: 5px; }
         .grid { display: flex; flex-wrap: wrap; gap: 4px 14px; }
@@ -98,36 +89,35 @@ export const generateSecondHandPurchaseForm = (mobile, shopDetails, seller = {},
         .val { font-weight: bold; border-bottom: 1px dotted #bbb; flex: 1; }
         .blank { border-bottom: 1px solid #000; flex: 1; height: 12px; display: inline-block; }
 
-        .amount-box { border: 2px solid #002395; border-radius: 4px; padding: 6px 10px; margin-top: 8px;
+        .amount-box { border: 2px solid #002395; border-radius: 4px; padding: 6px 10px; margin-top: 7px;
                       display: flex; justify-content: space-between; align-items: center; }
         .amount-box .k { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
         .amount-box .v { font-size: 18px; font-weight: 900; color: #002395; }
 
         .warning { border: 2px solid #ED2939; background: #fff5f5; border-radius: 4px;
-                   padding: 7px 10px; margin-top: 9px; }
+                   padding: 6px 10px; margin-top: 7px; }
         .warning-title { font-size: 10.5px; font-weight: 900; color: #ED2939; text-transform: uppercase;
                          letter-spacing: 0.5px; margin-bottom: 3px; }
-        .warning p { font-size: 9.5px; line-height: 1.55; color: #7a1520; }
+        .warning p { font-size: 9.5px; line-height: 1.5; color: #7a1520; }
 
-        .buyback { border: 1.5px dashed #002395; border-radius: 4px; padding: 7px 10px; margin-top: 9px; background: #f5f8ff; }
-        .buyback-title { font-size: 10.5px; font-weight: 900; color: #002395; text-transform: uppercase; margin-bottom: 3px; }
-        .buyback p { font-size: 9.5px; line-height: 1.6; }
-        .buyback .date { font-weight: 900; text-decoration: underline; }
+        .final-sale { border: 2px solid #ED2939; background: #fff5f5; border-radius: 4px; padding: 6px 10px; margin-top: 7px; }
+        .final-sale-title { font-size: 10.5px; font-weight: 900; color: #ED2939; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+        .final-sale p { font-size: 9.5px; line-height: 1.5; color: #7a1520; }
 
-        .decl li { font-size: 9.5px; line-height: 1.65; margin-bottom: 3px; margin-left: 14px; }
+        .decl li { font-size: 9.5px; line-height: 1.55; margin-bottom: 2px; margin-left: 14px; }
 
-        .sign-row { display: flex; justify-content: space-between; gap: 18px; margin-top: 16px; padding-top: 8px; border-top: 1px solid #ddd; }
+        .sign-row { display: flex; justify-content: space-between; gap: 18px; margin-top: 12px; padding-top: 7px; border-top: 1px solid #ddd; }
         .sign-col { flex: 1; }
-        .sig-line { border-bottom: 1px solid #000; margin-top: 28px; margin-bottom: 3px; }
-        .sig-img { display: block; height: 22mm; max-width: 60mm; object-fit: contain;
+        .sig-line { border-bottom: 1px solid #000; margin-top: 22px; margin-bottom: 3px; }
+        .sig-img { display: block; height: 20mm; max-width: 55mm; object-fit: contain;
                    border-bottom: 1px solid #000; margin-top: 4px; margin-bottom: 3px; }
         .sig-label { font-size: 9.5px; font-weight: bold; }
         .sig-note { font-size: 8.5px; color: #666; }
-        .thumb { border: 1px solid #000; width: 26mm; height: 26mm; display: flex; align-items: center;
+        .thumb { border: 1px solid #000; width: 24mm; height: 24mm; display: flex; align-items: center;
                  justify-content: center; font-size: 8px; color: #888; text-align: center; }
 
-        .footer { margin-top: 12px; display: flex; justify-content: space-between;
-                  font-size: 8.5px; color: #888; border-top: 1px solid #eee; padding-top: 5px; }
+        .footer { margin-top: 8px; display: flex; justify-content: space-between;
+                  font-size: 8.5px; color: #888; border-top: 1px solid #eee; padding-top: 4px; }
       </style>
     </head>
     <body>
@@ -143,6 +133,7 @@ export const generateSecondHandPurchaseForm = (mobile, shopDetails, seller = {},
           </div>
           <div class="doc-title">
             <h1>Mobile Purchase &amp;<br>Seller Declaration</h1>
+            <div class="sub" style="color:#ED2939;font-weight:900;">FINAL SALE &mdash; NO RETURN</div>
             <div class="sub">
               Date: <strong>${esc(fmtDate(purchaseDate) || fmtDate(new Date()))}</strong><br>
               ${m.assignedLabelNumber ? 'Ref: #' + esc(m.assignedLabelNumber) : ''}
@@ -190,6 +181,17 @@ export const generateSecondHandPurchaseForm = (mobile, shopDetails, seller = {},
             <div style="font-size:9px;color:#666;margin-top:1px;">Received in full by the seller on the date above</div>
           </div>
           <div class="v">Rs. ${Number(m.purchasePrice || 0).toLocaleString('en-IN')}</div>
+        </div>
+
+        <!-- FINAL SALE -->
+        <div class="final-sale">
+          <div class="final-sale-title">Final sale &mdash; no return, no buy-back</div>
+          <p>
+            Once the seller hands over the device and receives the payment stated above, the sale is
+            <strong>final and irrevocable</strong>. The device will <strong>not be returned</strong> to the
+            seller under any circumstances. The shop is free to repair, refurbish, resell or otherwise deal
+            with the device immediately, without any further notice or consent from the seller.
+          </p>
         </div>
 
         <!-- DECLARATION -->
