@@ -1,5 +1,10 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import {
+    getFirestore,
+    initializeFirestore,
+    persistentLocalCache,
+    persistentMultipleTabManager,
+} from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
@@ -50,6 +55,24 @@ if (missing.length) {
 const app = initializeApp(firebaseConfig);
 const secondaryApp = initializeApp(firebaseConfig, "secondary");
 
-export const db = getFirestore(app);
+/* Firestore charges a read per document, and the shop reopens this app all day
+   on the same handful of devices. Keeping a local copy lets an unchanged query
+   be answered from disk instead of re-reading every document, and the screens
+   still work through a dropped connection.
+
+   Persistence needs IndexedDB, which private-browsing modes and older WebViews
+   can refuse - fall back to the ordinary in-memory client rather than letting
+   the whole app fail to start. */
+let firestore;
+try {
+    firestore = initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    });
+} catch (err) {
+    console.warn('Firestore offline cache unavailable, continuing without it:', err);
+    firestore = getFirestore(app);
+}
+
+export const db = firestore;
 export const auth = getAuth(app);
 export const secondaryAuth = getAuth(secondaryApp);

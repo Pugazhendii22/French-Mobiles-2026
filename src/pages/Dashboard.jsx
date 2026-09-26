@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase/firebase';
-import { collection, getDocs, getCountFromServer, query, where } from 'firebase/firestore';
+import { collection, getDocs, getCountFromServer, query, where, orderBy, limit } from 'firebase/firestore';
 import Layout from '../components/common/Layout';
 import { Section, EmptyState } from '../components/common/ui';
 import { describeFirebaseError } from '../utils/firebaseError';
@@ -81,7 +81,6 @@ const Dashboard = () => {
     const fetchDashboardData = async () => {
       try {
         const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
         const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const endToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
@@ -93,27 +92,50 @@ const Dashboard = () => {
           ? collection(db, 'tasks')
           : query(collection(db, 'tasks'), where('assignedTo', '==', currentUser?.uid || '__none__'));
 
-        // Fetch all data in parallel for better performance
+        /* Firestore bills a read per document returned, so every query here asks
+           for the narrowest set that still answers the tile. Reading the whole
+           of sales to total up one day of it was the single most expensive thing
+           the app did, and this is the first screen after login.
+
+           createdAt is written as an ISO string everywhere, and ISO strings sort
+           chronologically, so a string range filter is a valid date filter. */
+        const startTodayISO = startToday.toISOString();
+
+        // Anything not yet handed back. Orders carrying an unrecognised status
+        // are no longer counted as pending - previously anything that was not
+        // Completed/Returned/Delivered was.
+        const OPEN_STATUSES = ['Received', 'In Progress', 'Parts Awaiting', 'Awaiting Customer Approval'];
+
+        /* allSettled, not all: one rejected query used to take the whole
+           dashboard down with it, so a single unavailable figure blanked every
+           tile on the screen. Each result is now read independently and a
+           failure costs only its own tile. */
         const [
-          salesSnap,
+          salesTodaySnap,
+          unpaidSalesSnap,
           prodSnap,
-          srvSnap,
+          openOrdersSnap,
+          recentOrdersSnap,
           custCountSnap,
           custTodayCountSnap,
-          enqSnap,
+          openEnqCountSnap,
           tasksSnap
-        ] = await Promise.all([
-          getDocs(collection(db, 'sales')),
+        ] = await Promise.allSettled([
+          getDocs(query(collection(db, 'sales'), where('createdAt', '>=', startTodayISO))),
+          getDocs(query(collection(db, 'sales'), where('balanceDue', '>', 0))),
+          // Low stock compares stock against threshold - two fields - which
+          // Firestore cannot filter on, so this one still reads in full.
           getDocs(collection(db, 'products')),
-          getDocs(collection(db, 'service_orders')),
+          getDocs(query(collection(db, 'service_orders'), where('status', 'in', OPEN_STATUSES))),
+          getDocs(query(collection(db, 'service_orders'), orderBy('createdAt', 'desc'), limit(5))),
           // Counted on the server - the dashboard only needs two numbers, and
           // downloading every customer to get them is a read per customer.
           getCountFromServer(collection(db, 'customers')),
           getCountFromServer(query(
             collection(db, 'customers'),
-            where('createdAt', '>=', startToday.toISOString())
+            where('createdAt', '>=', startTodayISO)
           )),
-          getDocs(collection(db, 'enquiries')),
+          getCountFromServer(query(collection(db, 'enquiries'), where('status', '==', 'Open'))),
           getDocs(tasksQuery)
         ]);
 
@@ -124,70 +146,76 @@ const Dashboard = () => {
           totalCustomers: 0, customersToday: 0, openEnquiries: 0
         };
 
-        // 1. Process Sales
-        salesSnap.forEach(d => {
-          const s = d.data();
-          if (s.createdAt?.startsWith(todayStr) || (s.createdAt?.toDate && s.createdAt.toDate() >= startToday && s.createdAt.toDate() < endToday)) {
-            newStats.salesTodayCount++;
-            newStats.salesTodayAmt += Number(s.totalAmount) || 0;
-          }
-          if (Number(s.balanceDue) > 0) {
-            newStats.pendingBillsAmt += Number(s.balanceDue);
-          }
+        // Unwrap a settled result, remembering the first failure to report
+        let firstFailure = null;
+        const docsOf = (settled) => {
+          if (settled.status === 'fulfilled') return settled.value;
+          if (!firstFailure) firstFailure = settled.reason;
+          console.error('Dashboard query failed:', settled.reason);
+          return { size: 0, forEach: () => {} };
+        };
+        const countOf = (settled) => {
+          if (settled.status === 'fulfilled') return settled.value.data().count;
+          if (!firstFailure) firstFailure = settled.reason;
+          console.error('Dashboard count failed:', settled.reason);
+          return 0;
+        };
+
+        // 1. Process Sales - both sets are already filtered by the queries above
+        const salesToday = docsOf(salesTodaySnap);
+        newStats.salesTodayCount = salesToday.size;
+        salesToday.forEach(d => {
+          newStats.salesTodayAmt += Number(d.data().totalAmount) || 0;
+        });
+        docsOf(unpaidSalesSnap).forEach(d => {
+          newStats.pendingBillsAmt += Number(d.data().balanceDue) || 0;
         });
 
         // 2. Process Products
-        prodSnap.forEach(d => {
+        docsOf(prodSnap).forEach(d => {
           const p = d.data();
           if (Number(p.stock) <= Number(p.threshold || 5)) {
             newStats.lowStockCount++;
           }
         });
 
-        // 3. Process Service Orders
-        const allOrders = [];
-        srvSnap.forEach(d => {
+        /* 3. Process Service Orders. Only open orders come back, so they are all
+           pending by definition; overdue and due-today are still worked out here
+           because expectedCompletionAt is stored as a Timestamp rather than an
+           ISO string and cannot share the status filter without an index. */
+        const openOrders = docsOf(openOrdersSnap);
+        newStats.pendingOrders = openOrders.size;
+        openOrders.forEach(d => {
           const srv = d.data();
           const expected = srv.expectedCompletionAt?.toDate ? srv.expectedCompletionAt.toDate() : new Date(srv.expectedCompletionAt);
-          const isCompleted = srv.status === 'Completed' || srv.status === 'Returned' || srv.status === 'Delivered';
-
-          if (!isCompleted) {
-            newStats.pendingOrders++;
-
-            if (expected instanceof Date && !Number.isNaN(expected.getTime())) {
-              if (expected < now) {
-                newStats.overdueOrders++;
-              } else if (expected >= startToday && expected < endToday) {
-                newStats.dueTodayOrders++;
-              }
+          if (expected instanceof Date && !Number.isNaN(expected.getTime())) {
+            if (expected < now) {
+              newStats.overdueOrders++;
+            } else if (expected >= startToday && expected < endToday) {
+              newStats.dueTodayOrders++;
             }
           }
-          allOrders.push({ id: d.id, ...srv });
         });
 
-        // Sort orders by createdAt desc for recent 5
-        allOrders.sort((a, b) => {
-          const da = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt).getTime();
-          const db = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt).getTime();
-          return (db || 0) - (da || 0);
-        });
-        setRecentOrders(allOrders.slice(0, 5));
+        // Recent five, ordered by the database rather than by sorting everything
+        const recent = [];
+        docsOf(recentOrdersSnap).forEach(d => recent.push({ id: d.id, ...d.data() }));
+        setRecentOrders(recent);
 
         // 4. Process Customers (server-side counts)
-        newStats.totalCustomers = custCountSnap.data().count;
-        newStats.customersToday = custTodayCountSnap.data().count;
+        newStats.totalCustomers = countOf(custCountSnap);
+        newStats.customersToday = countOf(custTodayCountSnap);
 
-        // 5. Process Enquiries
-        enqSnap.forEach(d => {
-          if (d.data().status === 'Open') newStats.openEnquiries++;
-        });
+        // 5. Enquiries - counted on the server
+        newStats.openEnquiries = countOf(openEnqCountSnap);
 
         setStats(newStats);
+        if (firstFailure) setLoadError(describeFirebaseError(firstFailure));
 
         // 6. Process Tasks
         let tPend = 0, tOver = 0;
         const tList = [];
-        tasksSnap.forEach(d => {
+        docsOf(tasksSnap).forEach(d => {
           const t = d.data();
           if (t.status === 'pending') {
             if (userRole?.toLowerCase() === 'admin' || t.assignedTo === currentUser?.uid) {
