@@ -11,35 +11,14 @@
    match prefixes and moving it server-side would quietly break "kumar"
    finding "Ravi Kumar".
 ────────────────────────────────────────────── */
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../firebase/firebase';
+import { loadCollection, invalidateCollection } from './collectionCache';
 
+// Customers change far less often than stock or sales, so this one is held
+// longer than the shared default.
 const TTL_MS = 5 * 60 * 1000;
 
-let cache = null;      // { at, list }
-let inflight = null;   // de-duplicates concurrent callers
-
-export const loadCustomers = async ({ force = false } = {}) => {
-  if (!force && cache && Date.now() - cache.at < TTL_MS) return cache.list;
-  if (!force && inflight) return inflight;
-
-  inflight = (async () => {
-    try {
-      const snap = await getDocs(collection(db, 'customers'));
-      const list = [];
-      snap.forEach(d => list.push({ id: d.id, ...d.data() }));
-      cache = { at: Date.now(), list };
-      return list;
-    } finally {
-      inflight = null;
-    }
-  })();
-
-  return inflight;
-};
+export const loadCustomers = (options = {}) =>
+  loadCollection('customers', { ttlMs: TTL_MS, ...options });
 
 /** Call after adding or changing a customer so the next read is fresh. */
-export const invalidateCustomers = () => {
-  cache = null;
-  inflight = null;
-};
+export const invalidateCustomers = () => invalidateCollection('customers');

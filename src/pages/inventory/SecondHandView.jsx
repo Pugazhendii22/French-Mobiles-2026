@@ -10,6 +10,7 @@ import PrinterSelector from '../../components/PrinterSelector';
 import Layout from '../../components/common/Layout';
 import ImageModal from '../../components/common/ImageModal';
 import { useAuth } from '../../context/AuthContext';
+import { invalidateCollection } from '../../utils/collectionCache';
 import { Section, InfoRow, InfoGrid, Chip, MoneyRow } from '../../components/common/ui';
 import { gradeColor } from '../../components/common/uiTokens';
 import { generateSecondHandPurchaseForm } from '../../utils/generateSecondHandPurchaseForm';
@@ -65,6 +66,7 @@ const SecondHandView = () => {
     }
     const updated = { ...data, updatedAt: new Date().toISOString() };
     await updateDoc(doc(db, 'second_hand_mobiles', id), updated);
+    invalidateCollection('second_hand_mobiles');
     setMobile({ id, ...updated });
     return id;
   };

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { collection, getDocs, addDoc, updateDoc, doc, increment, query, where, limit, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase/firebase';
+import { invalidateCollection } from '../../utils/collectionCache';
 import { useAuth } from '../../context/AuthContext';
 import { creditWallet, debitWallet } from '../../utils/walletUtils';
 import { nextDailyNumber } from '../../utils/counters';
@@ -61,6 +62,7 @@ const NewSaleModal = ({ isOpen = true, modalOnly = false, onClose, prefillData, 
     // Update inventory logic
     for (const item of data.items) {
       if (item.type === 'Second-hand') {
+        invalidateCollection('second_hand_mobiles');
         await updateDoc(doc(db, 'second_hand_mobiles', item.itemId), {
           status: 'sold',
           updatedAt: new Date().toISOString()
@@ -90,6 +92,7 @@ const NewSaleModal = ({ isOpen = true, modalOnly = false, onClose, prefillData, 
     }
 
     const docRef = await addDoc(collection(db, 'sales'), newSale);
+    invalidateCollection('sales');
 
     if (walletUsed > 0 && customerId) {
       await debitWallet(customerId, walletUsed, 'used_in_sale', docRef.id, currentUser.uid);

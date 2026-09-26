@@ -9,6 +9,7 @@ import PrinterSelector from '../../components/PrinterSelector';
 import Layout from '../../components/common/Layout';
 import ImageModal from '../../components/common/ImageModal';
 import { imageThumb } from '../../utils/imageUrl';
+import { invalidateCollection } from '../../utils/collectionCache';
 
 const ProductView = () => {
   const { id } = useParams();
@@ -45,6 +46,7 @@ const ProductView = () => {
 
   const handleUpdate = async (data) => {
     await updateDoc(doc(db, 'products', id), data);
+    invalidateCollection('products');
     setProduct({ id, ...data });
     return id;
   };

@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
 import { useAuth } from '../../context/AuthContext';
 import CustomerAutocomplete from '../../components/common/CustomerAutocomplete';
 import SecondHandMobileSelector from '../../components/sales/SecondHandMobileSelector';
@@ -12,6 +10,7 @@ import { Section, FieldError } from '../../components/common/ui';
 import { inputClass, labelClass, errorInput } from '../../components/common/uiTokens';
 import { DIRECT_PAYMENT_METHODS, FINANCE_PROVIDERS, isFinanceMethod } from '../../utils/paymentMethods';
 import { loadCustomers } from '../../utils/customerCache';
+import { loadCollection } from '../../utils/collectionCache';
 
 // Shared by the manual dropdowns and the barcode scanner so both autofill identically
 const buildSecondHandItem = (sh) => {
@@ -153,18 +152,11 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
       try {
         setCustomers(await loadCustomers());
 
-        const shSnap = await getDocs(collection(db, 'second_hand_mobiles'));
-        const shList = [];
-        shSnap.forEach(doc => {
-          if (doc.data().status === 'available') {
-            shList.push({ id: doc.id, ...doc.data() });
-          }
-        });
-        setSecondHandMobiles(shList);
-
-        const prodSnap = await getDocs(collection(db, 'products'));
-        const pList = [];
-        prodSnap.forEach(doc => pList.push({ id: doc.id, ...doc.data() }));
+        const [shList, pList] = await Promise.all([
+          loadCollection('second_hand_mobiles'),
+          loadCollection('products'),
+        ]);
+        setSecondHandMobiles(shList.filter(m => m.status === 'available'));
         setProducts(pList);
       } catch (err) {
         console.error("Error fetching data:", err);

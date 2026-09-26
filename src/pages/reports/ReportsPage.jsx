@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/common/Layout';
 import { loadCustomers } from '../../utils/customerCache';
+import { loadCollection } from '../../utils/collectionCache';
 
 const ReportsPage = () => {
   const { userRole } = useAuth();
@@ -32,18 +31,13 @@ const ReportsPage = () => {
 
     const fetchAll = async () => {
       try {
-        const [salSnap, srvSnap, shSnap, prdSnap, cst] = await Promise.all([
-          getDocs(collection(db, 'sales')),
-          getDocs(collection(db, 'service_orders')),
-          getDocs(collection(db, 'second_hand_mobiles')),
-          getDocs(collection(db, 'products')),
+        const [sal, srv, sh, prd, cst] = await Promise.all([
+          loadCollection('sales'),
+          loadCollection('service_orders'),
+          loadCollection('second_hand_mobiles'),
+          loadCollection('products'),
           loadCustomers(),
         ]);
-
-        const sal = []; salSnap.forEach(d => sal.push({ id: d.id, ...d.data() }));
-        const srv = []; srvSnap.forEach(d => srv.push({ id: d.id, ...d.data() }));
-        const sh = []; shSnap.forEach(d => sh.push({ id: d.id, ...d.data() }));
-        const prd = []; prdSnap.forEach(d => prd.push({ id: d.id, ...d.data() }));
 
         setSales(sal);
         setServiceOrders(srv);
@@ -75,17 +69,15 @@ const ReportsPage = () => {
 
     try {
       // Re-fetch fresh data from Firestore before printing
-      const [salSnap, srvSnap, shSnap, prdSnap, cst] = await Promise.all([
-        getDocs(collection(db, 'sales')),
-        getDocs(collection(db, 'service_orders')),
-        getDocs(collection(db, 'second_hand_mobiles')),
-        getDocs(collection(db, 'products')),
+      // Cached: printing right after opening the page should not re-read
+      // four whole collections, but a stale window still refreshes.
+      const [sal, srv, sh, prd, cst] = await Promise.all([
+        loadCollection('sales'),
+        loadCollection('service_orders'),
+        loadCollection('second_hand_mobiles'),
+        loadCollection('products'),
         loadCustomers(),
       ]);
-      const sal = []; salSnap.forEach(d => sal.push({ id: d.id, ...d.data() }));
-      const srv = []; srvSnap.forEach(d => srv.push({ id: d.id, ...d.data() }));
-      const sh = [];  shSnap.forEach(d  => sh.push({ id: d.id, ...d.data() }));
-      const prd = []; prdSnap.forEach(d => prd.push({ id: d.id, ...d.data() }));
       setSales(sal); setServiceOrders(srv); setSecondHand(sh); setProducts(prd); setCustomers(cst);
 
       // Small delay so React can re-render with fresh data before we snapshot innerHTML

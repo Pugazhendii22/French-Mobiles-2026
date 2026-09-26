@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/firebase';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Layout from '../../components/common/Layout';
 import SecondHandForm from './SecondHandForm';
 import { useAuth } from '../../context/AuthContext';
+import { loadCollection, invalidateCollection } from '../../utils/collectionCache';
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
 import { imageThumb } from '../../utils/imageUrl';
 import { describeFirebaseError } from '../../utils/firebaseError';
@@ -32,9 +33,7 @@ const SecondHandList = () => {
 
   const fetchMobiles = async () => {
     try {
-      const snapshot = await getDocs(collection(db, 'second_hand_mobiles'));
-      const list = [];
-      snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+      const list = await loadCollection('second_hand_mobiles');
       list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setMobiles(list);
     } catch (err) {
@@ -55,11 +54,13 @@ const SecondHandList = () => {
     if (data.id) {
       const { id, ...updateData } = newMobile;
       await updateDoc(doc(db, 'second_hand_mobiles', id), updateData);
+      invalidateCollection('second_hand_mobiles');
       fetchMobiles();
       return id;
     }
     newMobile.createdAt = new Date().toISOString();
     const docRef = await addDoc(collection(db, 'second_hand_mobiles'), newMobile);
+    invalidateCollection('second_hand_mobiles');
     fetchMobiles();
 
     const phone = (data.sellerPhone || data.sellerAlternatePhone || '').replace(/\D/g, '');
@@ -85,6 +86,7 @@ const SecondHandList = () => {
     setDeleting(true);
     try {
       await deleteDoc(doc(db, 'second_hand_mobiles', deleteTarget.id));
+      invalidateCollection('second_hand_mobiles');
       setMobiles(prev => prev.filter(m => m.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (err) { console.error(err); }

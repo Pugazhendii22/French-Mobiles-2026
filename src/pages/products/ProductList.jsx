@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebase/firebase';
 import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../../components/common/Layout';
 import ProductForm from './ProductForm';
 import { useAuth } from '../../context/AuthContext';
+import { loadCollection, invalidateCollection } from '../../utils/collectionCache';
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
 
 const ProductList = () => {
@@ -21,9 +22,7 @@ const ProductList = () => {
 
   const fetchProducts = async () => {
     try {
-      const snap = await getDocs(collection(db, 'products'));
-      const list = [];
-      snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+      const list = await loadCollection('products');
       list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setProducts(list);
     } catch (err) {
@@ -41,10 +40,12 @@ const ProductList = () => {
     if (data.id) {
       const { id, ...updateData } = data;
       await import('firebase/firestore').then(m => m.updateDoc(m.doc(db, 'products', id), updateData));
+      invalidateCollection('products');
       fetchProducts();
       return id;
     }
     const docRef = await addDoc(collection(db, 'products'), data);
+    invalidateCollection('products');
     fetchProducts();
     return docRef.id;
   };
@@ -54,6 +55,7 @@ const ProductList = () => {
     setDeleting(true);
     try {
       await deleteDoc(doc(db, 'products', deleteTarget.id));
+      invalidateCollection('products');
       setProducts(prev => prev.filter(p => p.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (err) { console.error(err); }

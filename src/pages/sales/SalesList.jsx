@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebase/firebase';
 import { Link, useLocation } from 'react-router-dom';
 import NewSaleModal from '../../components/sales/NewSaleModal';
 import Layout from '../../components/common/Layout';
 import { useAuth } from '../../context/AuthContext';
+import { loadCollection, invalidateCollection } from '../../utils/collectionCache';
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
 import { SearchBar, CollapsibleFilter, EmptyState, ListSkeleton, Chip } from '../../components/common/ui';
 
@@ -32,9 +33,7 @@ const SalesList = () => {
 
   const fetchData = async () => {
     try {
-      const snap = await getDocs(collection(db, 'sales'));
-      const list = [];
-      snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+      const list = await loadCollection('sales');
       list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setSales(list);
     } catch (err) {
@@ -53,6 +52,7 @@ const SalesList = () => {
     setDeleting(true);
     try {
       await deleteDoc(doc(db, 'sales', deleteTarget.id));
+      invalidateCollection('sales');
       setSales(prev => prev.filter(s => s.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (err) { console.error(err); }

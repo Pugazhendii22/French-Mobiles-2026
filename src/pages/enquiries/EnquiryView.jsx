@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/firebase';
+import { invalidateCollection } from '../../utils/collectionCache';
 import EnquiryForm from './EnquiryForm';
 import Layout from '../../components/common/Layout';
 
@@ -32,6 +33,7 @@ const EnquiryView = () => {
 
   const handleUpdate = async (data) => {
     await updateDoc(doc(db, 'enquiries', id), data);
+    invalidateCollection('enquiries');
     setEnquiry({ id, ...data });
     setShowEdit(false);
   };
@@ -41,6 +43,7 @@ const EnquiryView = () => {
     setConverting(true);
     try {
       await updateDoc(doc(db, 'enquiries', id), { status: 'Converted' });
+      invalidateCollection('enquiries');
       navigate('/sales', {
         state: {
           customerName: enquiry.customerName,

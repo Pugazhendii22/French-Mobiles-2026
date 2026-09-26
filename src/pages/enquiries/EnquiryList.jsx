@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebase/firebase';
 import { Link } from 'react-router-dom';
 import Layout from '../../components/common/Layout';
 import EnquiryForm from './EnquiryForm';
 import { useAuth } from '../../context/AuthContext';
+import { loadCollection, invalidateCollection } from '../../utils/collectionCache';
 
 const EnquiryList = () => {
   const { userRole } = useAuth();
@@ -19,9 +20,7 @@ const EnquiryList = () => {
 
   const fetchEnquiries = async () => {
     try {
-      const snap = await getDocs(collection(db, 'enquiries'));
-      const list = [];
-      snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+      const list = await loadCollection('enquiries');
       list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setEnquiries(list);
     } catch (err) { console.error(err); } finally { setLoading(false); }
@@ -31,6 +30,7 @@ const EnquiryList = () => {
 
   const handleSaveEnquiry = async (data) => {
     await addDoc(collection(db, 'enquiries'), data);
+    invalidateCollection('enquiries');
     setShowModal(false);
     fetchEnquiries();
   };
@@ -40,6 +40,7 @@ const EnquiryList = () => {
     setDeleting(true);
     try {
       await deleteDoc(doc(db, 'enquiries', deleteTarget.id));
+      invalidateCollection('enquiries');
       setEnquiries(prev => prev.filter(e => e.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (err) { console.error(err); }
