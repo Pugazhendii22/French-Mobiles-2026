@@ -3,6 +3,7 @@ import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../../firebase/firebase';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/common/Layout';
+import { openWhatsApp } from '../../utils/phone';
 
 const DuePaymentsPage = () => {
   const navigate = useNavigate();
@@ -201,16 +202,15 @@ const DuePaymentsPage = () => {
                         <i className="fas fa-eye mr-1"></i>View
                       </button>
                       {sale.customerPhone && (
-                        <a
-                          href={`https://wa.me/91${sale.customerPhone}?text=${encodeURIComponent(
+                        <button
+                          onClick={() => openWhatsApp(
+                            sale.customerPhone,
                             `Hi ${sale.customerName}, this is a reminder that you have a pending payment of Rs.${sale.balanceDue} for your purchase (Invoice: ${sale.invoiceNumber}) at French Mobiles. Please complete the payment at your earliest convenience. Thank you! - French Mobiles`
-                          )}`}
-                          target="_blank"
-                          rel="noreferrer"
+                          )}
                           className="bg-green-50 text-green-700 px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1"
                         >
                           <i className="fab fa-whatsapp"></i>Remind
-                        </a>
+                        </button>
                       )}
                     </div>
                   </div>
@@ -281,16 +281,15 @@ const DuePaymentsPage = () => {
                         <i className="fas fa-eye mr-1"></i>View
                       </button>
                       {order.customerPhone && (
-                        <a
-                          href={`https://wa.me/91${order.customerPhone}?text=${encodeURIComponent(
+                        <button
+                          onClick={() => openWhatsApp(
+                            order.customerPhone,
                             `Hi ${order.customerName}, this is a reminder that your ${order.brand} ${order.model} service (Order: ${order.orderNumber}) is completed at French Mobiles.\n\nService Amount: Rs.${order.estimatedPrice}\nAdvance Paid: Rs.${order.advancePaid || 0}\nBalance Due: Rs.${(order.estimatedPrice || 0) - (order.advancePaid || 0)}\n\nPlease visit us to collect your device and complete the payment. Thank you! - French Mobiles`
-                          )}`}
-                          target="_blank"
-                          rel="noreferrer"
+                          )}
                           className="bg-green-50 text-green-700 px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1"
                         >
                           <i className="fab fa-whatsapp"></i>Remind
-                        </a>
+                        </button>
                       )}
                     </div>
                   </div>

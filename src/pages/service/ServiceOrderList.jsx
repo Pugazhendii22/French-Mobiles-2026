@@ -13,6 +13,7 @@ import { nextDailyNumber } from '../../utils/counters';
 import { loadCustomers } from '../../utils/customerCache';
 import { SearchBar, CollapsibleFilter, EmptyState, ListSkeleton, Chip } from '../../components/common/ui';
 import { describeFirebaseError } from '../../utils/firebaseError';
+import { openWhatsApp as openWhatsAppChat, isWhatsAppReady } from '../../utils/phone';
 
 const ServiceOrderList = () => {
   const { currentUser, userName, userRole } = useAuth();
@@ -252,8 +253,7 @@ const ServiceOrderList = () => {
   const handleSendRatingWhatsApp = () => {
     if (ratingDataForModal) {
       const message = `Hi ${ratingDataForModal.customerName}, your ${ratingDataForModal.brand} ${ratingDataForModal.model} service (₹${completedOrderForBill?.estimatedPrice || 0}) is completed at French Mobiles! 🎉\n\nPlease rate our service:\nhttps://${window.location.host}/rate/${ratingDataForModal.token}\n\nThank you for choosing French Mobiles! 🙏`;
-      const phone = ratingDataForModal.customerPhone.replace(/\D/g, '');
-      window.open(`https://wa.me/91${phone}?text=${encodeURIComponent(message)}`, '_blank');
+      openWhatsAppChat(ratingDataForModal.customerPhone, message);
     }
     setRatingModalOpen(false);
     setBillModalOpen(true);
@@ -321,9 +321,8 @@ const ServiceOrderList = () => {
   };
 
   const openWhatsApp = (order) => {
-    const phone = order.customerPhone.replace(/\D/g, '');
     const message = `Hi ${order.customerName}, regarding your service order ${order.orderNumber} for ${order.brand} ${order.model}. - French Mobiles`;
-    window.open(`https://wa.me/91${phone}?text=${encodeURIComponent(message)}`, '_blank');
+    openWhatsAppChat(order.customerPhone || order.alternatePhone, message);
   };
 
   const handleQuickStatusChange = async (order, newStatus) => {
@@ -835,6 +834,12 @@ const ServiceOrderList = () => {
                 <a href={`tel:${whatsAppDialog.phone}`} className="text-xs text-green-600 font-semibold">
                   Sending to {whatsAppDialog.phone}
                 </a>
+                {!isWhatsAppReady(whatsAppDialog.phone) && (
+                  <p className="text-xs text-[#ED2939] font-semibold">
+                    <i className="fas fa-triangle-exclamation mr-1"></i>
+                    WhatsApp will not accept this number. Edit the order and save a valid 10-digit mobile number.
+                  </p>
+                )}
               </div>
               <div className="flex-shrink-0 px-4 py-3 border-t border-gray-100 flex gap-2">
                 <button
@@ -843,15 +848,16 @@ const ServiceOrderList = () => {
                 >
                   Skip
                 </button>
-                <a
-                  href={`https://wa.me/91${whatsAppDialog.phone}?text=${encodeURIComponent(whatsAppDialog.message)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={() => setWhatsAppDialog({ open: false })}
+                <button
+                  onClick={() => {
+                    if (openWhatsAppChat(whatsAppDialog.phone, whatsAppDialog.message)) {
+                      setWhatsAppDialog({ open: false });
+                    }
+                  }}
                   className="flex-[2] bg-green-600 text-white rounded-xl py-3 text-sm font-bold flex items-center justify-center gap-2"
                 >
                   <i className="fab fa-whatsapp text-lg"></i> Send
-                </a>
+                </button>
               </div>
             </div>
           </div>

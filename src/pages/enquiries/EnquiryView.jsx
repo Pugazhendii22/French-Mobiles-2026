@@ -5,6 +5,7 @@ import { db } from '../../firebase/firebase';
 import { invalidateCollection } from '../../utils/collectionCache';
 import EnquiryForm from './EnquiryForm';
 import Layout from '../../components/common/Layout';
+import { openWhatsApp as openWhatsAppChat } from '../../utils/phone';
 
 const EnquiryView = () => {
   const { id } = useParams();
@@ -59,10 +60,8 @@ const EnquiryView = () => {
   };
 
   const openWhatsApp = () => {
-    const phone = enquiry.customerPhone.replace(/\D/g, '');
     const message = `Hi ${enquiry.customerName}, thank you for your enquiry at French Mobiles. We will get back to you shortly regarding ${enquiry.modelEnquired}. - French Mobiles`;
-    const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
+    openWhatsAppChat(enquiry.customerPhone, message);
   };
 
   if (loading) return <div className="p-4 md:p-8 text-center">Loading...</div>;

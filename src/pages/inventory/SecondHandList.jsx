@@ -9,6 +9,8 @@ import { loadCollection, invalidateCollection } from '../../utils/collectionCach
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
 import { imageThumb } from '../../utils/imageUrl';
 import { describeFirebaseError } from '../../utils/firebaseError';
+import { openWhatsApp as openWhatsAppChat, isWhatsAppReady } from '../../utils/phone';
+import { secondHandLabelData, syncLabelSnapshot } from '../../utils/labelSync';
 
 const SecondHandList = () => {
   const { userRole } = useAuth();
@@ -56,6 +58,8 @@ const SecondHandList = () => {
       await updateDoc(doc(db, 'second_hand_mobiles', id), updateData);
       invalidateCollection('second_hand_mobiles');
       fetchMobiles();
+      // Keep any label printed for this mobile showing the edited details.
+      await syncLabelSnapshot('second_hand', id, secondHandLabelData(updateData));
       return id;
     }
     newMobile.createdAt = new Date().toISOString();
@@ -63,7 +67,9 @@ const SecondHandList = () => {
     invalidateCollection('second_hand_mobiles');
     fetchMobiles();
 
-    const phone = (data.sellerPhone || data.sellerAlternatePhone || '').replace(/\D/g, '');
+    // Kept as entered - phone.js normalizes it when the link is built, and the
+    // '+' of a foreign number must survive to reach the right country.
+    const phone = (data.sellerPhone || data.sellerAlternatePhone || '').trim();
     if (phone) {
       const price = Number(data.purchasePrice || 0).toLocaleString('en-IN');
       const message = `Hi ${data.sellerName || ''}, thank you for handing over your ${data.brand} ${data.model} to French Mobiles. We have received it and paid Rs.${price} in full as agreed. This is a final sale - the device will not be returned. - French Mobiles`;
@@ -397,6 +403,12 @@ const SecondHandList = () => {
                 <a href={`tel:${whatsAppDialog.phone}`} className="text-xs text-green-600 font-semibold">
                   Sending to {whatsAppDialog.phone}
                 </a>
+                {!isWhatsAppReady(whatsAppDialog.phone) && (
+                  <p className="text-xs text-[#ED2939] font-semibold">
+                    <i className="fas fa-triangle-exclamation mr-1"></i>
+                    WhatsApp will not accept this number. Edit the purchase and save a valid 10-digit mobile number.
+                  </p>
+                )}
               </div>
               <div className="flex-shrink-0 px-4 py-3 border-t border-gray-100 flex gap-2">
                 <button
@@ -405,15 +417,16 @@ const SecondHandList = () => {
                 >
                   Skip
                 </button>
-                <a
-                  href={`https://wa.me/91${whatsAppDialog.phone}?text=${encodeURIComponent(whatsAppDialog.message)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={() => setWhatsAppDialog({ open: false })}
+                <button
+                  onClick={() => {
+                    if (openWhatsAppChat(whatsAppDialog.phone, whatsAppDialog.message)) {
+                      setWhatsAppDialog({ open: false });
+                    }
+                  }}
                   className="flex-[2] bg-green-600 text-white rounded-xl py-3 text-sm font-bold flex items-center justify-center gap-2"
                 >
                   <i className="fab fa-whatsapp text-lg"></i> Send
-                </a>
+                </button>
               </div>
             </div>
           </div>

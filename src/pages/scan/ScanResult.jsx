@@ -6,6 +6,7 @@ import PatternLock from '../../components/PatternLock';
 import ImageModal from '../../components/common/ImageModal';
 import { useAuth } from '../../context/AuthContext';
 import { imageThumb } from '../../utils/imageUrl';
+import { secondHandLabelData } from '../../utils/labelSync';
 
 const Badge = ({ children, color }) => (
   <span className={`rounded-full px-3 py-1 text-xs font-bold ${color}`}>
@@ -46,13 +47,25 @@ const ScanResult = () => {
         const snap = await getDocs(q);
         if (!snap.empty) {
           const labelData = snap.docs[0].data();
-          setData(labelData);
           if (labelData.labelType === 'service_order' && labelData.referenceId) {
             const orderSnap = await getDoc(doc(db, 'service_orders', labelData.referenceId));
             if (orderSnap.exists()) {
               setServiceOrder({ id: orderSnap.id, ...orderSnap.data() });
             }
           }
+          /* The label stores a copy of the mobile made when it was printed, so
+             a price corrected since then would show the old value here. Lay the
+             live record over it; anything the label alone holds is kept. */
+          if (labelData.labelType === 'second_hand' && labelData.referenceId) {
+            const mobileSnap = await getDoc(doc(db, 'second_hand_mobiles', labelData.referenceId));
+            if (mobileSnap.exists()) {
+              labelData.data = {
+                ...labelData.data,
+                ...secondHandLabelData({ id: mobileSnap.id, ...mobileSnap.data() }),
+              };
+            }
+          }
+          setData(labelData);
         }
       } catch (err) {
         console.error(err);

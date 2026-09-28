@@ -14,6 +14,7 @@ import SignaturePad from '../../components/common/SignaturePad';
 import { imageThumb } from '../../utils/imageUrl';
 import { loadCustomers, invalidateCustomers } from '../../utils/customerCache';
 import { recordTacIfNew } from '../../utils/tacLookup';
+import { secondHandLabelData } from '../../utils/labelSync';
 
 const generateSerialNumber = () => {
   const date = new Date()
@@ -557,20 +558,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
         assignedAt: new Date().toISOString(),
         isActive: true,
         data: {
-          brand: finalData.brand,
-          model: finalData.model,
-          ram: finalData.ram,
-          rom: finalData.rom,
-          grade: finalData.condition,
-          imei1: finalData.imei1,
-          imei2: finalData.imei2,
-          serialNumber: finalSerialNumber,
-          salePrice: finalData.salePrice,
-          purchasePrice: finalData.purchasePrice,
-          condition: finalData.condition,
-          purchaseDate: finalData.purchaseDate,
-          supplier: finalData.supplier,
-          specialNotes: finalData.notes || '',
+          ...secondHandLabelData({ ...finalData, serialNumber: finalSerialNumber }),
           status: "available",
           createdBy: currentUser.uid,
           createdAt: new Date().toISOString()

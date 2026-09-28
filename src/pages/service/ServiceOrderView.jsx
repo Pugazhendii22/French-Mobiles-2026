@@ -19,6 +19,8 @@ import { Section, InfoRow, InfoGrid, Chip } from '../../components/common/ui';
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
 import { imageThumb } from '../../utils/imageUrl';
 import { describeFirebaseError } from '../../utils/firebaseError';
+import { openWhatsApp as openWhatsAppChat } from '../../utils/phone';
+import { serviceOrderLabelData, syncLabelSnapshot, withLiveLabelData } from '../../utils/labelSync';
 
 const STATUSES = ['Received', 'In Progress', 'Parts Awaiting', 'Awaiting Customer Approval', 'Returned'];
 const NON_COMPLETED_STATUSES = ['Received', 'In Progress', 'Parts Awaiting', 'Awaiting Customer Approval', 'Returned'];
@@ -173,8 +175,7 @@ const ServiceOrderView = () => {
   const handleSendRatingWhatsApp = () => {
     if (ratingDataForModal) {
       const message = `Hi ${ratingDataForModal.customerName}, your ${ratingDataForModal.brand} ${ratingDataForModal.model} service (₹${completedOrderForBill?.estimatedPrice || order?.estimatedPrice || 0}) is completed at French Mobiles! 🎉\n\nPlease rate our service:\nhttps://${window.location.host}/rate/${ratingDataForModal.token}\n\nThank you for choosing French Mobiles! 🙏`;
-      const phone = ratingDataForModal.customerPhone.replace(/\D/g, '');
-      window.open(`https://wa.me/91${phone}?text=${encodeURIComponent(message)}`, '_blank');
+      openWhatsAppChat(ratingDataForModal.customerPhone, message);
     }
     setRatingModalOpen(false);
     setBillModalOpen(true);
@@ -279,6 +280,11 @@ const ServiceOrderView = () => {
     const updated = { ...data, updatedAt: new Date().toISOString() };
     await updateDoc(doc(db, 'service_orders', id), updated);
     setOrder({ id, ...updated });
+    // The label keeps its own copy of the estimate - refresh it, or a reprint
+    // shows the amount this edit just replaced.
+    const liveData = serviceOrderLabelData(updated);
+    await syncLabelSnapshot('service_order', id, liveData);
+    setLabelEntry(prev => withLiveLabelData(prev, liveData));
     return id;
   };
 
@@ -340,9 +346,8 @@ const ServiceOrderView = () => {
   };
 
   const openWhatsApp = () => {
-    const phone = order.customerPhone.replace(/\D/g, '');
     const msg = `Hi ${order.customerName}, your ${order.brand} ${order.model} (Order: ${order.orderNumber}) is ready for pickup. Amount: ₹${order.estimatedPrice}. - French Mobiles`;
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+    openWhatsAppChat(order.customerPhone || order.alternatePhone, msg);
   };
 
   const handlePrintDocument = (htmlContent) => {
@@ -417,8 +422,7 @@ const ServiceOrderView = () => {
       setRatingDoc({ id: token, ...ratingData });
 
       const message = `Hi ${order.customerName}, your ${order.brand} ${order.model} service (₹${order.estimatedPrice}) is completed at French Mobiles! 🎉\n\nPlease take a moment to rate our service:\nhttps://${window.location.host}/rate/${token}\n\nThank you for choosing French Mobiles! 🙏`;
-      const phone = order.customerPhone.replace(/\D/g, '');
-      window.open(`https://wa.me/91${phone}?text=${encodeURIComponent(message)}`, '_blank');
+      openWhatsAppChat(order.customerPhone || order.alternatePhone, message);
 
     } catch (e) {
       console.error("Error generating rating link:", e);
@@ -444,18 +448,7 @@ const ServiceOrderView = () => {
         assignedAt: new Date().toISOString(),
         isActive: true,
         data: {
-          orderNumber: order.orderNumber || '',
-          brand: order.brand || '', model: order.model || '', colour: order.colour || '',
-          customerName: order.customerName || '', customerPhone: order.customerPhone || '',
-          complaintType: order.complaintNature || '',
-          complaintTypes: order.complaintTypes || (order.complaintNature ? [order.complaintNature] : []),
-          otherComplaint: order.otherComplaint || '',
-          problemDetails: order.problemDetails || '',
-          estimatedPrice: Number(order.estimatedPrice || 0), advancePaid: Number(order.advancePaid || 0),
-          technicianName: order.technicianName || '', status: order.status || '',
-          accessoriesCollected: order.accessories || [],
-          rawMaterialCost: Number(order.rawMaterialCost || 0),
-          outsideLabourCost: Number(order.outsideLabourCost || 0),
+          ...serviceOrderLabelData(order),
           createdBy: order.createdBy || '', createdAt: order.createdAt || '',
         }
       };
@@ -533,6 +526,9 @@ const ServiceOrderView = () => {
   const isCompletedBill = isCompleted || Boolean(order?.billCreated);
   const isAdmin = userRole?.toLowerCase() === 'admin';
   const isOverdue = expectedCompletionDate && !isCompleted && expectedCompletionDate < new Date();
+  /* Both print routes (browser HTML and print-to-shop-PC) must read the order
+     as it is now, not the copy stored when the label was assigned. */
+  const labelEntryLive = withLiveLabelData(labelEntry, serviceOrderLabelData(order));
 
   const canChangeStatus = isAdmin || (
     userRole === 'staff' &&
@@ -657,7 +653,7 @@ const ServiceOrderView = () => {
                 {labelEntry ? (
                   <button
                     onClick={() => {
-                      const html = generateLabelHTML(labelEntry)
+                      const html = generateLabelHTML(labelEntryLive)
                       setLabelHTML(html)
                       setShowPrinter(true)
                     }}
@@ -1066,7 +1062,7 @@ const ServiceOrderView = () => {
             isOpen={showPrinter}
             onClose={() => setShowPrinter(false)}
             htmlContent={labelHTML}
-            labelEntry={labelEntry}
+            labelEntry={labelEntryLive}
             title="Print Label"
           />
 

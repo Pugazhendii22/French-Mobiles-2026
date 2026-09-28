@@ -15,6 +15,7 @@ import { Section, InfoRow, InfoGrid, Chip, MoneyRow } from '../../components/com
 import { gradeColor } from '../../components/common/uiTokens';
 import { generateSecondHandPurchaseForm } from '../../utils/generateSecondHandPurchaseForm';
 import { imageThumb } from '../../utils/imageUrl';
+import { secondHandLabelData, syncLabelSnapshot, withLiveLabelData } from '../../utils/labelSync';
 
 const groupByCategory = (items) => {
   const grouped = {}
@@ -68,6 +69,11 @@ const SecondHandView = () => {
     await updateDoc(doc(db, 'second_hand_mobiles', id), updated);
     invalidateCollection('second_hand_mobiles');
     setMobile({ id, ...updated });
+    // The label carries a copy of these details - correct it too, or the next
+    // reprint or scan shows the price this edit just replaced.
+    const liveData = secondHandLabelData(updated);
+    await syncLabelSnapshot('second_hand', id, liveData);
+    setLabelEntry(prev => withLiveLabelData(prev, liveData));
     return id;
   };
 
@@ -97,17 +103,8 @@ const SecondHandView = () => {
         assignedAt: new Date().toISOString(),
         isActive: true,
         data: {
-          brand: mobile.brand || '', model: mobile.model || '',
-          ram: mobile.ram || '', rom: mobile.rom || '',
-          condition: mobile.condition || '', grade: mobile.condition || '',
-          imei1: mobile.imei1 || '', imei2: mobile.imei2 || '',
-          serialNumber: mobile.serialNumber || '',
-          purchasePrice: Number(mobile.purchasePrice || 0),
-          salePrice: Number(mobile.salePrice || 0),
-          purchaseDate: mobile.purchaseDate || '', supplier: mobile.supplier || '',
-          specialNotes: mobile.notes || '',
-          frontImageUrl: mobile.frontImageUrl || '', backImageUrl: mobile.backImageUrl || '',
-          status: mobile.status || '', createdBy: mobile.createdBy || '', createdAt: mobile.createdAt || '',
+          ...secondHandLabelData(mobile),
+          createdBy: mobile.createdBy || '', createdAt: mobile.createdAt || '',
         }
       };
       await addDoc(collection(db, 'label_registry'), labelData);
@@ -137,6 +134,9 @@ const SecondHandView = () => {
   const isAvailable = mobile?.status === 'available' || !mobile?.status;
   const canEdit = userRole?.toLowerCase() === 'admin' || isAvailable;
   const heroPhoto = mobile?.photo1Url || mobile?.frontImageUrl;
+  /* Both print routes (browser HTML and print-to-shop-PC) must read the mobile
+     as it is now, not the copy stored when the label was assigned. */
+  const labelEntryLive = withLiveLabelData(labelEntry, secondHandLabelData(mobile));
 
   return (
     <Layout title="Second-Hand Detail" pageType="detail" backTo="/inventory/second-hand">
@@ -242,7 +242,7 @@ const SecondHandView = () => {
               {labelEntry ? (
                 <button
                   onClick={() => {
-                    const html = generateLabelHTML(labelEntry)
+                    const html = generateLabelHTML(labelEntryLive)
                     setLabelHTML(html)
                     setShowPrinter(true)
                   }}
@@ -545,7 +545,7 @@ const SecondHandView = () => {
           isOpen={showPrinter}
           onClose={() => setShowPrinter(false)}
           htmlContent={labelHTML}
-          labelEntry={labelEntry}
+          labelEntry={labelEntryLive}
           title="Print Label"
         />
 
