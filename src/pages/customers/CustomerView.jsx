@@ -8,6 +8,7 @@ import CustomerForm from './CustomerForm';
 import Layout from '../../components/common/Layout';
 import ImageModal from '../../components/common/ImageModal';
 import { imageThumb } from '../../utils/imageUrl';
+import { openWhatsApp } from '../../utils/phone';
 
 const CustomerView = () => {
   const { id } = useParams();
@@ -272,14 +273,12 @@ const CustomerView = () => {
           >
             <i className="fas fa-edit"></i> Edit
           </button>
-          <a
-            href={`https://wa.me/91${customer?.phone}`}
-            target="_blank"
-            rel="noreferrer"
+          <button
+            onClick={() => openWhatsApp(customer?.phone || customer?.alternatePhone)}
             className="flex-1 bg-green-500 text-white rounded-xl py-2.5 text-sm font-semibold flex items-center justify-center gap-2"
           >
             <i className="fab fa-whatsapp"></i> WhatsApp
-          </a>
+          </button>
         </div>
       </div>
 

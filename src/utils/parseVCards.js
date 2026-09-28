@@ -9,6 +9,11 @@
    "+91 98765 43210" matches one typed as "9876543210".
 ────────────────────────────────────────────── */
 
+import { normalizeIndianPhone } from './phone';
+
+// Re-exported for the screens that already import it from here.
+export { normalizeIndianPhone };
+
 /** vCard 2.1 encodes non-ASCII names as quoted-printable bytes. */
 const decodeQuotedPrintable = (input, charset = 'utf-8') => {
   const bytes = [];
@@ -25,30 +30,6 @@ const decodeQuotedPrintable = (input, charset = 'utf-8') => {
   } catch {
     return input;
   }
-};
-
-/**
- * Reduce a raw TEL value to a 10-digit Indian number, or null if it is not one.
- * Handles +91 / 91 / 0 prefixes and strips spaces, dashes and brackets.
- */
-export const normalizeIndianPhone = (raw) => {
-  if (!raw) return null;
-  let digits = String(raw).replace(/[^\d+]/g, '');
-
-  if (digits.startsWith('+')) {
-    if (!digits.startsWith('+91')) return null;   // foreign number
-    digits = digits.slice(3);
-  } else if (digits.length === 12 && digits.startsWith('91')) {
-    digits = digits.slice(2);
-  } else if (digits.length === 11 && digits.startsWith('0')) {
-    digits = digits.slice(1);
-  }
-
-  digits = digits.replace(/\D/g, '');
-
-  // Indian mobile numbers are 10 digits and begin 6-9. Landlines, short codes
-  // and service numbers are deliberately left out of the customer list.
-  return /^[6-9]\d{9}$/.test(digits) ? digits : null;
 };
 
 const unfold = (text) =>
