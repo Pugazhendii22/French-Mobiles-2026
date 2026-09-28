@@ -13,12 +13,10 @@
 ────────────────────────────────────────────── */
 import { loadCollection, invalidateCollection } from './collectionCache';
 
-// Customers change far less often than stock or sales, so this one is held
-// longer than the shared default.
-const TTL_MS = 5 * 60 * 1000;
-
+/* Customers change far less often than stock or sales, so they are held longer
+   than anything else - see TTL_BY_COLLECTION in collectionCache.js. */
 export const loadCustomers = (options = {}) =>
-  loadCollection('customers', { ttlMs: TTL_MS, ...options });
+  loadCollection('customers', options);
 
 /** Call after adding or changing a customer so the next read is fresh. */
 export const invalidateCustomers = () => invalidateCollection('customers');

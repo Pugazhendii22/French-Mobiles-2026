@@ -73,6 +73,9 @@ const NewSaleModal = ({ isOpen = true, modalOnly = false, onClose, prefillData, 
           await updateDoc(productRef, {
             stock: increment(-item.quantity)
           });
+          // The stock just changed, so the cached product list must not be
+          // reused - the next bill checks stock against it.
+          invalidateCollection('products');
         } catch (e) {
           console.error("Error updating product stock", e);
         }
