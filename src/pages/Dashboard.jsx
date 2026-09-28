@@ -2,10 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase/firebase';
-import { collection, getDocs, getCountFromServer, query, where, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, getCountFromServer, getAggregateFromServer, sum, query, where, orderBy, limit } from 'firebase/firestore';
 import Layout from '../components/common/Layout';
 import { Section, EmptyState } from '../components/common/ui';
 import { describeFirebaseError } from '../utils/firebaseError';
+import { loadCollection } from '../utils/collectionCache';
 
 /* Compact tappable tile - the unit the whole stat grid is built from.
    Defined at module level so it is not recreated on every render. */
@@ -88,8 +89,10 @@ const Dashboard = () => {
         // Staff can only list tasks assigned to them (see MyTasks.jsx) - an
         // unfiltered query is rejected by the Firestore rules for non-admins,
         // which used to fail the whole Promise.all and leave every stat blank.
+        // Only pending tasks reach a tile, so an admin no longer downloads
+        // every task ever completed to count the few that are open.
         const tasksQuery = isAdminRole
-          ? collection(db, 'tasks')
+          ? query(collection(db, 'tasks'), where('status', '==', 'pending'))
           : query(collection(db, 'tasks'), where('assignedTo', '==', currentUser?.uid || '__none__'));
 
         /* Firestore bills a read per document returned, so every query here asks
@@ -112,8 +115,8 @@ const Dashboard = () => {
            failure costs only its own tile. */
         const [
           salesTodaySnap,
-          unpaidSalesSnap,
-          prodSnap,
+          unpaidSalesSum,
+          productsResult,
           openOrdersSnap,
           recentOrdersSnap,
           custCountSnap,
@@ -122,10 +125,17 @@ const Dashboard = () => {
           tasksSnap
         ] = await Promise.allSettled([
           getDocs(query(collection(db, 'sales'), where('createdAt', '>=', startTodayISO))),
-          getDocs(query(collection(db, 'sales'), where('balanceDue', '>', 0))),
+          // Totalled on the server. Reading every unpaid sale to add up one
+          // number cost a read per sale, and unpaid sales only accumulate.
+          getAggregateFromServer(
+            query(collection(db, 'sales'), where('balanceDue', '>', 0)),
+            { total: sum('balanceDue') }
+          ),
           // Low stock compares stock against threshold - two fields - which
-          // Firestore cannot filter on, so this one still reads in full.
-          getDocs(collection(db, 'products')),
+          // Firestore cannot filter on, so this one is still the whole list.
+          // Taken through the shared cache, so it is the same copy the Products
+          // page uses rather than a second full read on every dashboard open.
+          loadCollection('products'),
           getDocs(query(collection(db, 'service_orders'), where('status', 'in', OPEN_STATUSES))),
           getDocs(query(collection(db, 'service_orders'), orderBy('createdAt', 'desc'), limit(5))),
           // Counted on the server - the dashboard only needs two numbers, and
@@ -160,6 +170,13 @@ const Dashboard = () => {
           console.error('Dashboard count failed:', settled.reason);
           return 0;
         };
+        // The plain arrays the shared cache hands back
+        const listOf = (settled) => {
+          if (settled.status === 'fulfilled') return settled.value;
+          if (!firstFailure) firstFailure = settled.reason;
+          console.error('Dashboard list failed:', settled.reason);
+          return [];
+        };
 
         // 1. Process Sales - both sets are already filtered by the queries above
         const salesToday = docsOf(salesTodaySnap);
@@ -167,13 +184,26 @@ const Dashboard = () => {
         salesToday.forEach(d => {
           newStats.salesTodayAmt += Number(d.data().totalAmount) || 0;
         });
-        docsOf(unpaidSalesSnap).forEach(d => {
-          newStats.pendingBillsAmt += Number(d.data().balanceDue) || 0;
-        });
+        /* The sum rides the automatic index on balanceDue. If a project is
+           missing it, add the unpaid sales up here at the old cost rather than
+           showing the owner a pending total of zero. */
+        if (unpaidSalesSum.status === 'fulfilled') {
+          newStats.pendingBillsAmt = Number(unpaidSalesSum.value.data().total) || 0;
+        } else {
+          console.error('Pending bills sum failed, reading the sales instead:', unpaidSalesSum.reason);
+          try {
+            const unpaid = await getDocs(query(collection(db, 'sales'), where('balanceDue', '>', 0)));
+            unpaid.forEach(d => {
+              newStats.pendingBillsAmt += Number(d.data().balanceDue) || 0;
+            });
+          } catch (err) {
+            if (!firstFailure) firstFailure = err;
+            console.error('Pending bills fallback failed:', err);
+          }
+        }
 
         // 2. Process Products
-        docsOf(prodSnap).forEach(d => {
-          const p = d.data();
+        listOf(productsResult).forEach(p => {
           if (Number(p.stock) <= Number(p.threshold || 5)) {
             newStats.lowStockCount++;
           }
