@@ -5,7 +5,7 @@ import { invalidateCollection } from '../../utils/collectionCache';
 import { useAuth } from '../../context/AuthContext';
 import { creditWallet, debitWallet } from '../../utils/walletUtils';
 import { nextDailyNumber } from '../../utils/counters';
-import { invalidateCustomers } from '../../utils/customerCache';
+import { rememberCustomer } from '../../utils/customerCache';
 import SalesForm from '../../pages/sales/SalesForm';
 
 const NewSaleModal = ({ isOpen = true, modalOnly = false, onClose, prefillData, onSuccess }) => {
@@ -39,15 +39,16 @@ const NewSaleModal = ({ isOpen = true, modalOnly = false, onClose, prefillData, 
       customerId = existingCust.id;
     } else {
       // Auto-create customer if phone is new
-      invalidateCustomers();
-      const newCustRef = await addDoc(collection(db, 'customers'), {
+      const newCustomer = {
         name: data.customerName,
         phone: data.customerPhone,
         walletBalance: 0,
         walletHistory: [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-      });
+      };
+      const newCustRef = await addDoc(collection(db, 'customers'), newCustomer);
+      rememberCustomer({ id: newCustRef.id, ...newCustomer });
       customerId = newCustRef.id;
     }
 

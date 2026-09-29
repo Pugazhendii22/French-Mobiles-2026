@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { collection, getDocs, writeBatch, doc } from 'firebase/firestore';
+import { collection, writeBatch, doc } from 'firebase/firestore';
 import { db } from '../../firebase/firebase';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/common/Layout';
 import { Section } from '../../components/common/ui';
 import { buildCustomerImport } from '../../utils/parseVCards';
-import { invalidateCustomers } from '../../utils/customerCache';
+import { loadCustomers, refreshCustomers } from '../../utils/customerCache';
 
 const BATCH_SIZE = 400;   // Firestore allows 500 writes per batch
 
@@ -40,10 +40,10 @@ const ImportContacts = () => {
     try {
       const text = await file.text();
 
-      // Existing numbers, so re-running the import cannot create duplicates
-      const snap = await getDocs(collection(db, 'customers'));
-      const existing = [];
-      snap.forEach(d => { if (d.data().phone) existing.push(d.data().phone); });
+      /* Existing numbers, so re-running the import cannot create duplicates.
+         Taken from the copy on the phone - reading every customer to collect
+         their phone numbers is a read per customer. */
+      const existing = (await loadCustomers()).map(c => c.phone).filter(Boolean);
 
       setResult(buildCustomerImport(text, existing));
     } catch (err) {
@@ -77,7 +77,7 @@ const ImportContacts = () => {
         await batch.commit();
         setWritten(Math.min(i + BATCH_SIZE, rows.length));
       }
-      invalidateCustomers();
+      await refreshCustomers();
       setDone(true);
     } catch (err) {
       console.error(err);

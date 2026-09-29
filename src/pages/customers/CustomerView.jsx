@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { doc, getDoc, updateDoc, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { creditWallet } from '../../utils/walletUtils';
+import { loadCustomers, rememberCustomer } from '../../utils/customerCache';
 import CustomerForm from './CustomerForm';
 import Layout from '../../components/common/Layout';
 import ImageModal from '../../components/common/ImageModal';
@@ -43,16 +44,16 @@ const CustomerView = () => {
     setHistoryError('');
     try {
       const docRef = doc(db, 'customers', id);
-      const customersRef = collection(db, 'customers');
-      const salesQuery = query(collection(db, 'sales'), orderBy('createdAt', 'desc'), limit(100));
-      const serviceQuery = query(collection(db, 'service_orders'), orderBy('createdAt', 'desc'), limit(100));
 
-      // Fetch customer, all customers, sales, and service orders
-      const [docSnap, customersSnap, salesSnap, serviceSnap] = await Promise.all([
+      /* This page used to read the whole customers collection, plus the last
+         hundred sales and the last hundred service orders shop-wide, and sift
+         them here - a few hundred reads to open one customer, and a history
+         that silently went empty once a customer's last bill fell outside
+         those hundred. Both are now fetched by who they belong to, and the
+         duplicate-name check reads the copy already on the phone. */
+      const [docSnap, allCustomers] = await Promise.all([
         getDoc(docRef),
-        getDocs(customersRef),
-        getDocs(salesQuery),
-        getDocs(serviceQuery)
+        loadCustomers().catch(() => []),
       ]);
 
       if (docSnap.exists()) {
@@ -61,57 +62,71 @@ const CustomerView = () => {
         if (raw.walletBalance === undefined || raw.walletHistory === undefined) {
           await updateDoc(docRef, {
             walletBalance: raw.walletBalance ?? 0,
-            walletHistory: raw.walletHistory ?? []
+            walletHistory: raw.walletHistory ?? [],
+            updatedAt: new Date().toISOString()
           });
         }
         const custData = { id: docSnap.id, ...raw, walletBalance: raw.walletBalance ?? 0, walletHistory: raw.walletHistory ?? [] };
         setCustomer(custData);
+        rememberCustomer(custData);
         setLoading(false);
 
-        // Get all customers to check for name duplicates
-        const allCustomers = [];
-        customersSnap.forEach(doc => allCustomers.push({ id: doc.id, ...doc.data() }));
-
-        const customerNormalizedPhone = normalizePhone(custData.phone);
-        const customerNormalizedAlt = normalizePhone(custData.alternatePhone);
         const customerNameLower = custData.name ? custData.name.toLowerCase() : "";
+        // Two customers sharing a name means a bill carrying only a name cannot
+        // be attributed to either, so those are left out below.
+        const hasNameDuplicates = allCustomers.filter(
+          c => c.name && c.name.toLowerCase() === customerNameLower
+        ).length > 1;
 
-        // Check if there are multiple customers with the same name
-        const customersWithSameName = allCustomers.filter(c => 
-          c.name && c.name.toLowerCase() === customerNameLower
-        );
-        const hasNameDuplicates = customersWithSameName.length > 1;
+        /* A bill written before customerId existed carries only the phone, and
+           the shop has typed that phone every way there is, so ask for the
+           spellings this customer could have been written as. */
+        const phoneVariants = new Set();
+        [custData.phone, custData.alternatePhone].forEach(value => {
+          const national = normalizePhone(value);
+          if (!national) return;
+          [value, national, `+91${national}`, `91${national}`, `0${national}`]
+            .filter(Boolean)
+            .forEach(variant => phoneVariants.add(String(variant)));
+        });
+        const phones = [...phoneVariants].slice(0, 30);   // Firestore caps 'in' at 30
 
-        const matchCustomer = (docData) => {
-          // First try to match by customerId if available
-          if (custData.id && docData.customerId === custData.id) return true;
-          
-          // For legacy data without customerId, only match if there are no name duplicates
-          if (!hasNameDuplicates) {
-            const docPhone = normalizePhone(docData.customerPhone);
-            if (customerNormalizedPhone && docPhone === customerNormalizedPhone) return true;
-            if (customerNormalizedAlt && docPhone === customerNormalizedAlt) return true;
-            const docName = docData.customerName ? docData.customerName.toLowerCase() : "";
-            if (customerNameLower && docName === customerNameLower) return true;
+        const ownedBy = async (collectionName) => {
+          const ref = collection(db, collectionName);
+          const queries = [
+            getDocs(query(ref, where('customerId', '==', custData.id), limit(50))),
+          ];
+          if (phones.length) {
+            queries.push(getDocs(query(ref, where('customerPhone', 'in', phones), limit(50))));
           }
-          
-          return false;
+          // Oldest records carry only a name. That is safe to go on when no
+          // other customer shares the name - the same rule this page used.
+          if (custData.name && !hasNameDuplicates) {
+            queries.push(getDocs(query(ref, where('customerName', '==', custData.name), limit(50))));
+          }
+
+          const found = new Map();
+          const results = await Promise.allSettled(queries);
+          results.forEach(result => {
+            if (result.status !== 'fulfilled') {
+              console.error(`${collectionName} history query failed:`, result.reason);
+              return;
+            }
+            result.value.forEach(d => found.set(d.id, { id: d.id, ...d.data() }));
+          });
+
+          return [...found.values()]
+            .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+            .slice(0, 20);
         };
 
-        const salesData = [];
-        salesSnap.docs.forEach(d => {
-          const data = d.data();
-          if (matchCustomer(data)) salesData.push({ id: d.id, ...data });
-        });
+        const [salesData, serviceData] = await Promise.all([
+          ownedBy('sales'),
+          ownedBy('service_orders'),
+        ]);
 
-        const serviceData = [];
-        serviceSnap.docs.forEach(d => {
-          const data = d.data();
-          if (matchCustomer(data)) serviceData.push({ id: d.id, ...data });
-        });
-
-        setSales(salesData.slice(0, 20));
-        setServiceOrders(serviceData.slice(0, 20));
+        setSales(salesData);
+        setServiceOrders(serviceData);
       } else {
         if (!quickData) setCustomer(null);
         console.error("No such customer!");
@@ -142,6 +157,7 @@ const CustomerView = () => {
     const updatedData = { ...data, updatedAt: new Date().toISOString() };
     await updateDoc(doc(db, 'customers', id), updatedData);
     setCustomer({ id, ...updatedData });
+    rememberCustomer({ id, ...updatedData });
     setShowEdit(false);
     // Refresh history silently
     fetchCustomerData();

@@ -18,9 +18,14 @@ const applyWalletChange = async (customerId, delta, entry) => {
 
     if (newBalance < 0) throw new Error('Insufficient wallet balance')
 
+    /* updatedAt is how the other phones learn a customer changed (see
+       customerStore.js), so a wallet move has to stamp it like any other
+       write - otherwise a balance taken here stays wrong on the next till
+       until the daily refresh. */
     tx.update(custRef, {
       walletBalance: newBalance,
       walletHistory: arrayUnion({ ...entry, balanceAfter: newBalance }),
+      updatedAt: new Date().toISOString(),
     })
 
     return newBalance
