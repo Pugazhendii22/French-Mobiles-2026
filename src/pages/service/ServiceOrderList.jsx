@@ -10,7 +10,7 @@ import { creditWallet } from '../../utils/walletUtils';
 import NewSaleModal from '../../components/sales/NewSaleModal';
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
 import { nextDailyNumber } from '../../utils/counters';
-import { loadCustomers } from '../../utils/customerCache';
+import { loadCustomers, rememberCustomer } from '../../utils/customerCache';
 import { SearchBar, CollapsibleFilter, EmptyState, ListSkeleton, Chip } from '../../components/common/ui';
 import { describeFirebaseError } from '../../utils/firebaseError';
 import { openWhatsApp as openWhatsAppChat, isWhatsAppReady } from '../../utils/phone';
@@ -128,12 +128,15 @@ const ServiceOrderList = () => {
     };
 
     if (!customers.find(c => c.phone === data.customerPhone)) {
-      await addDoc(collection(db, 'customers'), {
+      const now = new Date().toISOString();
+      const record = {
         name: data.customerName,
         phone: data.customerPhone,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
+        createdAt: now,
+        updatedAt: now
+      };
+      const ref = await addDoc(collection(db, 'customers'), record);
+      rememberCustomer({ id: ref.id, ...record });
     }
 
     if (data.id) {

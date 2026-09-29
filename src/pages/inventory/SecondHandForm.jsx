@@ -12,7 +12,7 @@ import { uploadImageToCloudinary } from '../../utils/uploadImage';
 import { generateSecondHandPurchaseForm } from '../../utils/generateSecondHandPurchaseForm';
 import SignaturePad from '../../components/common/SignaturePad';
 import { imageThumb } from '../../utils/imageUrl';
-import { loadCustomers, invalidateCustomers } from '../../utils/customerCache';
+import { loadCustomers, rememberCustomer } from '../../utils/customerCache';
 import { recordTacIfNew } from '../../utils/tacLookup';
 import { secondHandLabelData } from '../../utils/labelSync';
 
@@ -387,14 +387,20 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
     if (!newCust.name || !newCust.phone) return alert('Name and phone required');
     setSavingCustomer(true);
     try {
-      const docRef = await addDoc(collection(db, 'customers'), {
+      const now = new Date().toISOString();
+      const record = {
         name: newCust.name,
         phone: newCust.phone,
         idType: newCust.idType,
-        idNumber: newCust.idNumber
-      });
-      const c = { id: docRef.id, name: newCust.name, phone: newCust.phone, idType: newCust.idType, idNumber: newCust.idNumber };
-      invalidateCustomers();
+        idNumber: newCust.idNumber,
+        // Without these the customer never reaches the other phones, which
+        // pull changes by updatedAt.
+        createdAt: now,
+        updatedAt: now
+      };
+      const docRef = await addDoc(collection(db, 'customers'), record);
+      const c = { id: docRef.id, ...record };
+      rememberCustomer(c);
       setCustomers(prev => [...prev, c]);
       handleCustomerSelect(c);
       setShowNewCustomer(false);

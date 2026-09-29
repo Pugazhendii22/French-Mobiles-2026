@@ -6,7 +6,7 @@ import Layout from '../../components/common/Layout';
 import CustomerForm from './CustomerForm';
 import { useAuth } from '../../context/AuthContext';
 import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
-import { loadCustomers, invalidateCustomers } from '../../utils/customerCache';
+import { loadCustomers, rememberCustomer, forgetCustomer } from '../../utils/customerCache';
 
 const Modal = ({ title, onClose, children }) => (
   <div className="fixed inset-0 z-50 bg-black/50 overflow-y-auto flex items-start justify-center p-4">
@@ -45,8 +45,11 @@ const CustomerList = () => {
   useEffect(() => { fetchCustomers(); }, []);
 
   const handleSaveCustomer = async (data) => {
-    await addDoc(collection(db, 'customers'), { ...data, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-    invalidateCustomers();
+    const stamped = { ...data, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const ref = await addDoc(collection(db, 'customers'), stamped);
+    // Kept on the phone directly - re-reading the collection to see a customer
+    // we just wrote costs a read per customer.
+    rememberCustomer({ id: ref.id, ...stamped });
     setShowModal(false);
     fetchCustomers();
   };
@@ -56,7 +59,7 @@ const CustomerList = () => {
     setDeleting(true);
     try {
       await deleteDoc(doc(db, 'customers', deleteTarget.id));
-      invalidateCustomers();
+      forgetCustomer(deleteTarget.id);
       setCustomers(prev => prev.filter(c => c.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (err) { console.error(err); }
