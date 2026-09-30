@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { getPrinters, printLabelQZ } from '../utils/qzPrint'
 import qz from 'qz-tray'
 import { checkPrintServer, printLabelMobile } from '../utils/mobilePrint'
+import { withPageRule } from '../utils/printLabel'
 
 const PrinterSelector = ({ isOpen, onClose, htmlContent, labelEntry, title = 'Print Label' }) => {
   const [printers, setPrinters] = useState([])
@@ -89,7 +90,9 @@ const PrinterSelector = ({ isOpen, onClose, htmlContent, labelEntry, title = 'Pr
 
   const handleBrowserPrint = () => {
     const printWindow = window.open('', '_blank')
-    printWindow.document.write(htmlContent)
+    // A browser has to be told the paper is 50x25mm; QZ Tray and the print
+    // server are told separately, so the page rule is added only here.
+    printWindow.document.write(withPageRule(htmlContent))
     printWindow.document.close()
     setTimeout(() => printWindow.print(), 500)
     onClose()
