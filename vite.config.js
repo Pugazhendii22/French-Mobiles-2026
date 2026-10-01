@@ -84,7 +84,8 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.js'],
+    // .jsx too: a render test written for a later slice must not be skipped silently
+    include: ['src/**/*.test.{js,jsx}'],
   },
   build: {
     rollupOptions: {

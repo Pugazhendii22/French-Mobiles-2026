@@ -2,12 +2,11 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Layout from '@/shared/ui/Layout';
 import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
-import { useAuth } from '@/context/AuthContext';
+import { describeFirebaseError } from '@/shared/firebase/firebaseError';
 import { listProducts, createProduct, updateProduct, deleteProduct } from './data';
 import ProductForm from './ProductForm';
 
 const ProductList = () => {
-  useAuth();
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,14 +16,17 @@ const ProductList = () => {
   const [showModal, setShowModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   const fetchProducts = async () => {
     try {
+      setLoadError('');
       const list = await listProducts();
       list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setProducts(list);
     } catch (err) {
       console.error(err);
+      setLoadError(describeFirebaseError(err));
     } finally {
       setLoading(false);
     }
@@ -159,6 +161,17 @@ return (
           </div>
         </div>
 
+        {loadError && (
+          <div className="px-4 pb-2">
+            <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
+              <p className="text-sm font-bold text-[#ED2939]">
+                <i className="fas fa-exclamation-circle mr-2"></i>Could not load the product list
+              </p>
+              <p className="text-xs text-[#7a1520] mt-1 leading-relaxed">{loadError}</p>
+            </div>
+          </div>
+        )}
+
         {/* PRODUCT CARDS */}
         <div className="px-4 space-y-3">
           {loading ? (
@@ -166,7 +179,9 @@ return (
           ) : filteredProducts.length === 0 ? (
             <div className="text-center py-16">
               <i className="fas fa-box text-4xl text-gray-200 mb-3 block"></i>
-              <p className="text-gray-400 text-sm">No products found</p>
+              <p className="text-gray-400 text-sm">
+                {loadError ? 'The list could not be loaded' : 'No products found'}
+              </p>
             </div>
           ) : (
             filteredProducts.map(p => (

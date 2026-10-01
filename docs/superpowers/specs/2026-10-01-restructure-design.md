@@ -164,7 +164,9 @@ Every slice must also pass `npm run build`. These prove imports resolve and
 nothing is syntactically broken; they prove nothing about behaviour, which is
 what the data-module tests and the per-slice click-through are for.
 
-Lint is **file-scoped, not repo-wide**. `npm run lint` fails on the untouched
+Lint is **file-scoped, not repo-wide** — this paragraph was amended after
+planning, when the baseline turned out never to have passed; the original
+version of this spec asked each slice to pass `npm run lint` outright. `npm run lint` fails on the untouched
 baseline with 450 errors, 306 of them one rule (`react-hooks/error-boundaries`)
 that fights this codebase's style. So the gate is: every file a slice creates
 or moves ends at 0 eslint errors, checked with `npx eslint <paths>`. Fixing the
@@ -228,6 +230,28 @@ being the form's hook at 202. Nothing in it exceeds 300.
 Both named behaviour changes shipped as designed: every products write now
 invalidates the cached list, and `buildProductData` is the document-building
 logic once instead of twice.
+
+The first has a payoff the design did not spell out: `SalesForm` resolves a
+scanned barcode against the *cached* products list via `assignedLabelNumber`,
+so invalidating after save-and-print is what makes a label you just printed
+scannable instead of unfindable for two minutes.
+
+**Two further changes came out of the review, both bug fixes rather than moves:**
+
+- **A sold-out product could not be edited at all.** Validation tested
+  `!formData.stock`, and an edit seeds the form from the Firestore document where
+  `stock` is a number — so `0` read as "missing" and the save was refused. Staff
+  could not change the price of anything that had sold out without first editing
+  its stock count. Same trap for a `salePrice` of 0. Validation is now the pure,
+  tested `validateProductForm`, where missing means empty rather than falsy.
+  This only ever bit on edit: `'0'` typed into the field is a non-empty string
+  and always passed.
+- **`ProductList` swallowed read failures.** A rejected read left the list empty
+  and rendered "No products found" with an invitation to add one — so a
+  permission change or a cleared offline cache looked like an empty shop. It now
+  surfaces the failure through `describeFirebaseError`, which `SecondHandList`,
+  `SalesList`, `ServiceOrderList`, `ServiceOrderView` and `Dashboard` already
+  did. Products was the only list screen that did not.
 
 **What the slice found that the spec did not predict:**
 

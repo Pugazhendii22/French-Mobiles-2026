@@ -98,9 +98,15 @@ describe('deleteProduct', () => {
   })
 })
 
-/* Review Focus 1: a failed read must not look like an empty shop. */
+/*
+ * Review Focus 1, data-layer half: this module must pass a failure through
+ * rather than turning it into an empty list. The cache's own behaviour - that a
+ * failed read rejects, is not cached, and reaches every concurrent caller - is
+ * pinned in shared/data/__tests__/collectionCache.test.js, and what the screen
+ * shows when it happens is ProductList's error banner.
+ */
 describe('a failing collection read', () => {
-  it('rejects instead of resolving to an empty list', async () => {
+  it('is passed through, not swallowed into an empty list', async () => {
     mocks.loadCollection.mockRejectedValue(new Error('permission-denied'))
     await expect(listProducts()).rejects.toThrow('permission-denied')
   })

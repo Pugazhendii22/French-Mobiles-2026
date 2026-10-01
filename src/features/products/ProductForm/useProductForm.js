@@ -5,6 +5,7 @@ import { generateLabelHTML } from '@/features/labels/printing/printLabel';
 import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
 import { updateProduct } from '../data';
 import { buildProductData } from './buildProductData';
+import { validateProductForm } from './validateProductForm';
 
 const generateSerialNumber = () => {
   const date = new Date()
@@ -42,23 +43,11 @@ export const useProductForm = ({ onSave, initialData }) => {
   const stockRef = useRef(null)
 
   const validateAndScroll = () => {
-    const errors = {}
-    let firstErrorRef = null
-
-    if (!formData.name) {
-      errors.name = 'Product name is required'
-      if (!firstErrorRef) firstErrorRef = nameRef
-    }
-    if (!formData.salePrice) {
-      errors.salePrice = 'Sale price is required'
-      if (!firstErrorRef) firstErrorRef = salePriceRef
-    }
-    if (!formData.stock) {
-      errors.stock = 'Stock quantity is required'
-      if (!firstErrorRef) firstErrorRef = stockRef
-    }
-
+    const { errors, firstErrorField } = validateProductForm(formData)
     setFieldErrors(errors)
+
+    const refFor = { name: nameRef, salePrice: salePriceRef, stock: stockRef }
+    const firstErrorRef = firstErrorField ? refFor[firstErrorField] : null
 
     if (firstErrorRef?.current) {
       firstErrorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })

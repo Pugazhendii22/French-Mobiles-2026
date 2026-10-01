@@ -49,6 +49,15 @@ npm run dev
 - [ ] Changing stock updates the status badge accordingly
 - [ ] Reopening the list shows the edited values — not a stale cached row
 
+## The two things the review turned up
+
+- [ ] Open a product whose stock is **0** (sold out), change only its price, save.
+      It must save. This was broken before — validation treated 0 as a missing
+      value and refused, so sold-out items could not be repriced.
+- [ ] A product with sale price 0 can also be saved
+- [ ] To see the new error banner: turn off the network and reload `/products`.
+      It must say it could not load the list, **not** "No products found".
+
 ## Labels and printing
 
 - [ ] "Assign Label" on the detail page offers the next number and saves it
