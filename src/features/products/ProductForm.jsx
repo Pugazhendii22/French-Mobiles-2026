@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../../context/AuthContext';
-import { collection, getDocs, addDoc, query, where, setDoc, updateDoc, doc } from 'firebase/firestore';
-import { db } from '@/shared/firebase/firebase';
-import { getLabelNumber } from '@/features/labels/data';
-import { generateLabelHTML } from '@/features/labels/printing/printLabel';
+import { useState, useEffect, useRef } from 'react';
+import { useAuth } from '@/context/AuthContext';
 import PrinterSelector from '@/features/labels/printing/PrinterSelector';
+import { generateLabelHTML } from '@/features/labels/printing/printLabel';
+import { getLabelNumber, findLabel, createLabelEntryKeyedByNumber } from '@/features/labels/data';
+import { updateProduct } from './data';
 import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
 import { imageThumb } from '@/shared/lib/imageUrl';
 
@@ -68,9 +67,7 @@ const ProductForm = ({ onSave, onCancel, initialData = null }) => {
     return Object.keys(errors).length === 0
   }
   const [labelAssigned, setLabelAssigned] = useState(false);
-  const [assignedLabelNumber, setAssignedLabelNumber] = useState(null);
   const [labelEntry, setLabelEntry] = useState(null);
-  const [assigning, setAssigning] = useState(false);
   const [localId, setLocalId] = useState(initialData?.id || null);
   const [saveStatus, setSaveStatus] = useState('idle');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -78,18 +75,15 @@ const ProductForm = ({ onSave, onCancel, initialData = null }) => {
   const [labelHTMLContent, setLabelHTMLContent] = useState('');
 
   useEffect(() => {
-    if (localId) {
-      const checkLabel = async () => {
-        const q = query(collection(db, 'label_registry'), where('referenceId', '==', localId), where('labelType', '==', 'product'));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          setLabelAssigned(true);
-          setAssignedLabelNumber(snap.docs[0].data().labelNumber);
-          setLabelEntry(snap.docs[0].data());
-        }
-      };
-      checkLabel();
-    }
+    if (!localId) return;
+    const checkLabel = async () => {
+      const entry = await findLabel('product', localId);
+      if (entry) {
+        setLabelAssigned(true);
+        setLabelEntry(entry);
+      }
+    };
+    checkLabel();
   }, [localId]);
 
   const handleUpload = async (e) => {
@@ -223,11 +217,11 @@ const ProductForm = ({ onSave, onCancel, initialData = null }) => {
         }
       };
 
-      await setDoc(doc(db, "label_registry", nextLabel.toString()), labelData);
+      await createLabelEntryKeyedByNumber(nextLabel, labelData);
 
-      await updateDoc(doc(db, "products", savedDocId || localId), {
+      await updateProduct(savedDocId || localId, {
         assignedLabelNumber: nextLabel,
-        serialNumber: finalSerialNumber
+        serialNumber: finalSerialNumber,
       });
 
       // Step 4: Show printer selector
@@ -238,7 +232,6 @@ const ProductForm = ({ onSave, onCancel, initialData = null }) => {
 
       setSaveStatus(`Saved & Label #${nextLabel} Assigned ✓`);
       setLabelAssigned(true);
-      setAssignedLabelNumber(nextLabel);
 
     } catch (error) {
       console.error("Save & Print error:", error);
@@ -247,60 +240,6 @@ const ProductForm = ({ onSave, onCancel, initialData = null }) => {
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  const handleAssignLabel = async () => {
-    if (!localId) return;
-    setAssigning(true);
-    try {
-      const nextNum = await getLabelNumber();
-      if (window.confirm(`Assign label #${nextNum} to this product?`)) {
-        const labelData = {
-          labelNumber: Number(nextNum),
-          labelType: 'product',
-          referenceId: localId,
-          assignedBy: currentUser.uid,
-          assignedAt: new Date().toISOString(),
-          isActive: true,
-          data: {
-            productName: formData.name || '',
-            brand: formData.brand || '',
-            category: formData.category || '',
-            sku: formData.sku || '',
-            purchasePrice: Number(formData.purchasePrice) || 0,
-            salePrice: Number(formData.salePrice) || 0,
-            stockQuantity: Number(formData.stock) || 0,
-            imageUrl: formData.imageUrl || '',
-            notes: formData.notes || '',
-          }
-        };
-        await addDoc(collection(db, 'label_registry'), labelData);
-        setLabelAssigned(true);
-        setAssignedLabelNumber(nextNum);
-        setLabelEntry(labelData);
-      }
-    } catch (err) {
-      alert("Error assigning label: " + err.message);
-    } finally {
-      setAssigning(false);
-    }
-  };
-
-  const handlePrintLabel = () => {
-    const labelData = {
-      labelType: 'product',
-      labelNumber: labelAssigned ? assignedLabelNumber : null,
-      data: {
-        productName: formData.name || '',
-        brand: formData.brand || '',
-        category: formData.category || '',
-        salePrice: Number(formData.salePrice) || 0,
-      }
-    }
-    const html = generateLabelHTML(labelData)
-    setLabelHTMLContent(html)
-    setLabelEntry(labelData)
-    setShowPrinterSelector(true)
   };
 
   return (

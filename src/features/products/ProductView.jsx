@@ -1,15 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
-import { db, auth } from '@/shared/firebase/firebase';
-import ProductForm from './ProductForm';
-import { getLabelNumber } from '@/features/labels/data';
-import { generateLabelHTML } from '@/features/labels/printing/printLabel';
-import PrinterSelector from '@/features/labels/printing/PrinterSelector';
+import { auth } from '@/shared/firebase/firebase';
 import Layout from '@/shared/ui/Layout';
 import ImageModal from '@/shared/ui/ImageModal';
+import PrinterSelector from '@/features/labels/printing/PrinterSelector';
+import { generateLabelHTML } from '@/features/labels/printing/printLabel';
+import { getLabelNumber, findLabel, createLabelEntry } from '@/features/labels/data';
 import { imageThumb } from '@/shared/lib/imageUrl';
-import { invalidateCollection } from '@/shared/data/collectionCache';
+import { getProduct, updateProduct } from './data';
+import ProductForm from './ProductForm';
 
 const ProductView = () => {
   const { id } = useParams();
@@ -32,21 +31,25 @@ const ProductView = () => {
 
   const fetchProduct = async () => {
     try {
-      const docSnap = await getDoc(doc(db, 'products', id));
-      if (docSnap.exists()) setProduct({ id: docSnap.id, ...docSnap.data() });
+      const found = await getProduct(id);
+      if (found) setProduct(found);
     } catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
   const fetchLabel = async () => {
-    const snap = await getDocs(query(collection(db, 'label_registry'), where('referenceId', '==', id), where('labelType', '==', 'product')));
-    if (!snap.empty) setLabelEntry(snap.docs[0].data());
+    const entry = await findLabel('product', id);
+    if (entry) setLabelEntry(entry);
   };
 
-  useEffect(() => { fetchProduct(); fetchLabel(); }, [id]);
+  /* Reload when the route's product id changes. Same pattern as the list page. */
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchProduct();
+    fetchLabel();
+  }, [id]);
 
   const handleUpdate = async (data) => {
-    await updateDoc(doc(db, 'products', id), data);
-    invalidateCollection('products');
+    await updateProduct(id, data);
     setProduct({ id, ...data });
     return id;
   };
@@ -81,7 +84,7 @@ const ProductView = () => {
           createdAt: product.createdAt || '',
         }
       };
-      await addDoc(collection(db, 'label_registry'), labelData);
+      await createLabelEntry(labelData);
       setLabelEntry(labelData);
       setShowLabelDialog(false);
     } catch (err) { console.error(err); alert('Failed to assign label.'); }

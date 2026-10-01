@@ -1,15 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { collection, addDoc, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '@/shared/firebase/firebase';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Layout from '@/shared/ui/Layout';
-import ProductForm from './ProductForm';
-import { useAuth } from '../../context/AuthContext';
-import { loadCollection, invalidateCollection } from '@/shared/data/collectionCache';
 import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
+import { useAuth } from '@/context/AuthContext';
+import { listProducts, createProduct, updateProduct, deleteProduct } from './data';
+import ProductForm from './ProductForm';
 
 const ProductList = () => {
-  const { userRole } = useAuth();
+  useAuth();
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,7 +20,7 @@ const ProductList = () => {
 
   const fetchProducts = async () => {
     try {
-      const list = await loadCollection('products');
+      const list = await listProducts();
       list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setProducts(list);
     } catch (err) {
@@ -32,30 +30,32 @@ const ProductList = () => {
     }
   };
 
+  /* Load the list once on mount. fetchProducts only sets state after awaiting,
+     but the rule traces the call and cannot see that. Every list screen in this
+     app fetches this way; replacing the pattern belongs in one pass that gives
+     them all a shared hook, not in a move of this one feature. */
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchProducts();
   }, []);
 
   const handleSaveProduct = async (data) => {
     if (data.id) {
       const { id, ...updateData } = data;
-      await import('firebase/firestore').then(m => m.updateDoc(m.doc(db, 'products', id), updateData));
-      invalidateCollection('products');
+      await updateProduct(id, updateData);
       fetchProducts();
       return id;
     }
-    const docRef = await addDoc(collection(db, 'products'), data);
-    invalidateCollection('products');
+    const newId = await createProduct(data);
     fetchProducts();
-    return docRef.id;
+    return newId;
   };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await deleteDoc(doc(db, 'products', deleteTarget.id));
-      invalidateCollection('products');
+      await deleteProduct(deleteTarget.id);
       setProducts(prev => prev.filter(p => p.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (err) { console.error(err); }
@@ -75,8 +75,6 @@ const ProductList = () => {
 
     return matchesSearch && matchesCategory && matchesStatus;
   });
-
-  const statusColor = (s) => ({ 'in stock': 'bg-green-100 text-green-800', 'low stock': 'bg-yellow-100 text-yellow-800', 'out of stock': 'bg-red-100 text-red-800' }[s] || 'bg-gray-100 text-gray-800');
 
   const fab = (
     <button
