@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
-import { db, auth } from '../../firebase/firebase';
+import { db, auth } from '@/shared/firebase/firebase';
 import { useSettings } from '../../context/SettingsContext';
 import SecondHandForm from './SecondHandForm';
 import { getLabelNumber } from '../../utils/getLabelNumber';
 import { generateLabelHTML } from '../../utils/printLabel.jsx';
 import PrinterSelector from '../../components/PrinterSelector';
-import Layout from '../../components/common/Layout';
-import ImageModal from '../../components/common/ImageModal';
+import Layout from '@/shared/ui/Layout';
+import ImageModal from '@/shared/ui/ImageModal';
 import { useAuth } from '../../context/AuthContext';
-import { invalidateCollection } from '../../utils/collectionCache';
-import { Section, InfoRow, InfoGrid, Chip, MoneyRow } from '../../components/common/ui';
-import { gradeColor } from '../../components/common/uiTokens';
+import { invalidateCollection } from '@/shared/data/collectionCache';
+import { Section, InfoRow, InfoGrid, Chip, MoneyRow } from '@/shared/ui/ui';
+import { gradeColor } from '@/shared/ui/uiTokens';
 import { generateSecondHandPurchaseForm } from '../../utils/generateSecondHandPurchaseForm';
-import { imageThumb } from '../../utils/imageUrl';
+import { imageThumb } from '@/shared/lib/imageUrl';
 import { secondHandLabelData, syncLabelSnapshot, withLiveLabelData } from '../../utils/labelSync';
 
 const groupByCategory = (items) => {

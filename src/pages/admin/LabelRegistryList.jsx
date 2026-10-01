@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
-import Layout from '../../components/common/Layout';
+import { db } from '@/shared/firebase/firebase';
+import Layout from '@/shared/ui/Layout';
 import { generateLabelHTML } from '../../utils/printLabel.jsx';
 import PrinterSelector from '../../components/PrinterSelector';
 import { useAuth } from '../../context/AuthContext';
-import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
+import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
 
 const LabelRegistryList = () => {
   const { userRole } = useAuth();

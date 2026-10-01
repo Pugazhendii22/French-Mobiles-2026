@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
-import { db } from '../firebase/firebase'
+import { db } from '@/shared/firebase/firebase'
 
 const SettingsContext = createContext()
 

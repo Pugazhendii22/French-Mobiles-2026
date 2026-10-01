@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, getDocs, addDoc, updateDoc, deleteDoc, doc, Timestamp, orderBy } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { useAuth } from '../../context/AuthContext';
-import Layout from '../../components/common/Layout';
+import Layout from '@/shared/ui/Layout';
 import { checkAndResetTasks } from '../../utils/taskResetLogic';
-import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
+import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
 
 const TaskManagement = () => {
   const { currentUser } = useAuth();

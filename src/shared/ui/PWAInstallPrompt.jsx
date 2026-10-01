@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
 const PWAInstallPrompt = () => {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -27,7 +27,7 @@ const PWAInstallPrompt = () => {
     
     deferredPrompt.prompt();
     
-    const { outcome } = await deferredPrompt.userChoice;
+    await deferredPrompt.userChoice;
     
     setDeferredPrompt(null);
     setShowPrompt(false);

@@ -1,5 +1,4 @@
-import React from 'react';
-import { imageFull } from '../../utils/imageUrl';
+import { imageFull } from '@/shared/lib/imageUrl';
 
 const ImageModal = ({ isOpen, onClose, imageUrl, title = 'View Image' }) => {
   if (!isOpen || !imageUrl) return null;

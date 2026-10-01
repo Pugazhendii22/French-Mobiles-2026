@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
-import Layout from '../../components/common/Layout';
+import { db } from '@/shared/firebase/firebase';
+import Layout from '@/shared/ui/Layout';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
+import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
 
 const RatingsList = () => {
   const { userRole } = useAuth();

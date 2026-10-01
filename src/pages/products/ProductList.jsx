@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { collection, addDoc, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { Link, useNavigate } from 'react-router-dom';
-import Layout from '../../components/common/Layout';
+import Layout from '@/shared/ui/Layout';
 import ProductForm from './ProductForm';
 import { useAuth } from '../../context/AuthContext';
-import { loadCollection, invalidateCollection } from '../../utils/collectionCache';
-import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
+import { loadCollection, invalidateCollection } from '@/shared/data/collectionCache';
+import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
 
 const ProductList = () => {
   const { userRole } = useAuth();

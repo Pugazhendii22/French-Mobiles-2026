@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, setDoc, doc, limit } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth, db } from '../firebase/firebase';
+import { auth, db } from '@/shared/firebase/firebase';
 import { useNavigate } from 'react-router-dom';
 
 const AdminSetup = () => {

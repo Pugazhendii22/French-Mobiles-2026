@@ -1,4 +1,4 @@
-import { nextLabelNumber } from './counters';
+import { nextLabelNumber } from '@/shared/data/counters';
 
 /**
  * Next label number. Backed by an atomic counter - previously this read the

@@ -112,12 +112,6 @@ const PatternLock = ({ value = [], onChange, readOnly = false }) => {
 
   const points = pattern.map(id => DOTS[id - 1]).filter(Boolean);
   
-  // Create the path: connect all dots, then extend to current position if drawing
-  const pathData = points.length > 0 ? 
-    `M ${points.map(p => `${p.cx} ${p.cy}`).join(' L ')}${
-      isDrawing ? ` L ${currentPos.x} ${currentPos.y}` : ''
-    }` : '';
-
   return (
     <div className="w-full" style={{ touchAction: 'none', userSelect: 'none' }}>
       <p className="text-sm text-gray-500 text-center mb-3">
@@ -199,7 +193,7 @@ const PatternLock = ({ value = [], onChange, readOnly = false }) => {
           </svg>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', width: '100%', height: '100%' }}>
-            {DOTS.map(({ id }, index) => {
+            {DOTS.map(({ id }) => {
               const isSelected = pattern.includes(id);
               const isFirst = pattern[0] === id;
               const isLast = pattern.length > 1 && pattern[pattern.length - 1] === id;

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { deleteDoc, doc } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { Link, useLocation } from 'react-router-dom';
 import NewSaleModal from '../../components/sales/NewSaleModal';
-import Layout from '../../components/common/Layout';
+import Layout from '@/shared/ui/Layout';
 import { useAuth } from '../../context/AuthContext';
-import { loadCollection, invalidateCollection } from '../../utils/collectionCache';
-import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
-import { SearchBar, CollapsibleFilter, EmptyState, ListSkeleton, Chip } from '../../components/common/ui';
+import { loadCollection, invalidateCollection } from '@/shared/data/collectionCache';
+import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
+import { SearchBar, CollapsibleFilter, EmptyState, ListSkeleton, Chip } from '@/shared/ui/ui';
 
 const SalesList = () => {
   const { userRole } = useAuth();

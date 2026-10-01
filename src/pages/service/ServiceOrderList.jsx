@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, doc, updateDoc, query, where, setDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { useNavigate, useLocation } from 'react-router-dom';
-import Layout from '../../components/common/Layout';
+import Layout from '@/shared/ui/Layout';
 import ServiceOrderForm from './ServiceOrderForm';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import { creditWallet } from '../../utils/walletUtils';
 import NewSaleModal from '../../components/sales/NewSaleModal';
-import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
-import { nextDailyNumber } from '../../utils/counters';
+import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
+import { nextDailyNumber } from '@/shared/data/counters';
 import { loadCustomers, rememberCustomer } from '../../utils/customerCache';
-import { SearchBar, CollapsibleFilter, EmptyState, ListSkeleton, Chip } from '../../components/common/ui';
-import { describeFirebaseError } from '../../utils/firebaseError';
-import { openWhatsApp as openWhatsAppChat, isWhatsAppReady } from '../../utils/phone';
+import { SearchBar, CollapsibleFilter, EmptyState, ListSkeleton, Chip } from '@/shared/ui/ui';
+import { describeFirebaseError } from '@/shared/firebase/firebaseError';
+import { openWhatsApp as openWhatsAppChat, isWhatsAppReady } from '@/shared/lib/phone';
 
 const ServiceOrderList = () => {
   const { currentUser, userName, userRole } = useAuth();

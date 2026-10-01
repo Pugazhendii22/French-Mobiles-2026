@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
-import { auth } from '../../firebase/firebase';
+import { auth } from '@/shared/firebase/firebase';
 import { useAuth } from '../../context/AuthContext';
 
 /* ─────────────────────────────────────────────
@@ -240,8 +240,12 @@ const Layout = ({
     touchActive.current = false;
   };
 
-  // Close drawer on route change
+  /* Close the drawer when the route changes. This has to react to the router
+     rather than happen in the nav click handlers, because browser back and
+     forward change the route without any handler of ours running - and a
+     drawer left open over the new screen covers it. */
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMenuDrawerOpen(false);
   }, [location.pathname]);
 

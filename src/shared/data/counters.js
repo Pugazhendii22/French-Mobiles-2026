@@ -14,7 +14,7 @@ import {
   doc, getDoc, getDocs, setDoc, runTransaction,
   collection, query, where, orderBy, limit,
 } from 'firebase/firestore';
-import { db } from '../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 
 const COUNTERS = 'counters';
 

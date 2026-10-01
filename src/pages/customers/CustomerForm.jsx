@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { uploadImageToCloudinary } from '../../utils/uploadImage';
-import { imageThumb } from '../../utils/imageUrl';
+import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
+import { imageThumb } from '@/shared/lib/imageUrl';
 
 const CustomerForm = ({ initialData, onSave, onCancel }) => {
   const [formData, setFormData] = useState(initialData || {

@@ -1,5 +1,5 @@
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
-import { db } from '../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 
 export const checkAndResetTasks = async () => {
   try {

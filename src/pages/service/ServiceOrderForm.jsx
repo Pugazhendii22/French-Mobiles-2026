@@ -1,22 +1,22 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
-import { Section, FieldError } from '../../components/common/ui';
-import { inputClass, labelClass, errorInput } from '../../components/common/uiTokens';
+import { Section, FieldError } from '@/shared/ui/ui';
+import { inputClass, labelClass, errorInput } from '@/shared/ui/uiTokens';
 import { collection, getDocs, addDoc, query, where, setDoc, updateDoc, doc } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import CustomerAutocomplete from '../../components/common/CustomerAutocomplete';
-import ImeiInput from '../../components/ImeiInput';
+import ImeiInput from '@/shared/components/ImeiInput';
 import { getLabelNumber } from '../../utils/getLabelNumber';
-import { uploadImageToCloudinary } from '../../utils/uploadImage';
+import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
 import { generateLabelHTML } from '../../utils/printLabel.jsx';
 import { generateServiceJobCard } from '../../utils/generateServiceJobCard';
 import PrinterSelector from '../../components/PrinterSelector';
-import { imageThumb } from '../../utils/imageUrl';
+import { imageThumb } from '@/shared/lib/imageUrl';
 import { loadCustomers } from '../../utils/customerCache';
 import { recordTacIfNew } from '../../utils/tacLookup';
 
-const PatternLock = lazy(() => import('../../components/PatternLock').catch(() => ({ default: () => <div className="text-red-500">Failed to load PatternLock</div> })));
+const PatternLock = lazy(() => import('@/shared/components/PatternLock').catch(() => ({ default: () => <div className="text-red-500">Failed to load PatternLock</div> })));
 
 const generateSerialNumber = () => {
   const date = new Date()

@@ -1,5 +1,5 @@
 import { collection, query, where, limit, getDocs } from 'firebase/firestore';
-import { db } from '../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 
 /**
  * Resolve a scanned barcode / label number to its label_registry entry.

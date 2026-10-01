@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 import { collection, getDocs, addDoc, updateDoc, doc, increment, query, where, limit, getDoc } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
-import { invalidateCollection } from '../../utils/collectionCache';
+import { db } from '@/shared/firebase/firebase';
+import { invalidateCollection } from '@/shared/data/collectionCache';
 import { useAuth } from '../../context/AuthContext';
 import { creditWallet, debitWallet } from '../../utils/walletUtils';
-import { nextDailyNumber } from '../../utils/counters';
+import { nextDailyNumber } from '@/shared/data/counters';
 import { rememberCustomer } from '../../utils/customerCache';
 import SalesForm from '../../pages/sales/SalesForm';
 

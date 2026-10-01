@@ -3,14 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import CustomerAutocomplete from '../../components/common/CustomerAutocomplete';
 import SecondHandMobileSelector from '../../components/sales/SecondHandMobileSelector';
-import BarcodeScannerModal from '../../components/common/BarcodeScannerModal';
+import BarcodeScannerModal from '@/shared/components/BarcodeScannerModal';
 import { lookupLabel } from '../../utils/lookupLabel';
-import { describeFirebaseError } from '../../utils/firebaseError';
-import { Section, FieldError } from '../../components/common/ui';
-import { inputClass, labelClass, errorInput } from '../../components/common/uiTokens';
+import { describeFirebaseError } from '@/shared/firebase/firebaseError';
+import { Section, FieldError } from '@/shared/ui/ui';
+import { inputClass, labelClass, errorInput } from '@/shared/ui/uiTokens';
 import { DIRECT_PAYMENT_METHODS, FINANCE_PROVIDERS, isFinanceMethod } from '../../utils/paymentMethods';
 import { loadCustomers } from '../../utils/customerCache';
-import { loadCollection } from '../../utils/collectionCache';
+import { loadCollection } from '@/shared/data/collectionCache';
 
 // Shared by the manual dropdowns and the barcode scanner so both autofill identically
 const buildSecondHandItem = (sh) => {

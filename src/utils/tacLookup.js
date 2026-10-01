@@ -1,6 +1,6 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../firebase/firebase';
-import { tacDb } from '../firebase/tacFirebase';
+import { db } from '@/shared/firebase/firebase';
+import { tacDb } from '@/shared/firebase/tacFirebase';
 
 /* TAC = Type Allocation Code, the first 8 digits of an IMEI. It identifies the
    exact device model, so once we know brand/model for a TAC we never need to

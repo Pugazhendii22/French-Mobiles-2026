@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
-import { db, auth } from '../../firebase/firebase';
+import { db, auth } from '@/shared/firebase/firebase';
 import ProductForm from './ProductForm';
 import { getLabelNumber } from '../../utils/getLabelNumber';
 import { generateLabelHTML } from '../../utils/printLabel.jsx';
 import PrinterSelector from '../../components/PrinterSelector';
-import Layout from '../../components/common/Layout';
-import ImageModal from '../../components/common/ImageModal';
-import { imageThumb } from '../../utils/imageUrl';
-import { invalidateCollection } from '../../utils/collectionCache';
+import Layout from '@/shared/ui/Layout';
+import ImageModal from '@/shared/ui/ImageModal';
+import { imageThumb } from '@/shared/lib/imageUrl';
+import { invalidateCollection } from '@/shared/data/collectionCache';
 
 const ProductView = () => {
   const { id } = useParams();

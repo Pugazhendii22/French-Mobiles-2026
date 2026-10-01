@@ -1,5 +1,5 @@
 import { doc, runTransaction, arrayUnion } from 'firebase/firestore'
-import { db } from '../firebase/firebase'
+import { db } from '@/shared/firebase/firebase'
 
 /* Wallet moves run inside a transaction. Reading the balance and then writing
    it back separately meant two operations on the same customer at the same

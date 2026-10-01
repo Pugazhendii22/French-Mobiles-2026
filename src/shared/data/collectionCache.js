@@ -32,7 +32,7 @@
    the error banners on the list pages still fire.
 ────────────────────────────────────────────── */
 import { collection, getDocs, getDocsFromCache } from 'firebase/firestore';
-import { db } from '../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 
 const DEFAULT_TTL_MS = 2 * 60 * 1000;
 

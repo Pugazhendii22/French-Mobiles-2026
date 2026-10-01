@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { collection, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { useNavigate, useLocation } from 'react-router-dom';
-import Layout from '../../components/common/Layout';
+import Layout from '@/shared/ui/Layout';
 import SecondHandForm from './SecondHandForm';
 import { useAuth } from '../../context/AuthContext';
-import { loadCollection, invalidateCollection } from '../../utils/collectionCache';
-import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
-import { imageThumb } from '../../utils/imageUrl';
-import { describeFirebaseError } from '../../utils/firebaseError';
-import { openWhatsApp as openWhatsAppChat, isWhatsAppReady } from '../../utils/phone';
+import { loadCollection, invalidateCollection } from '@/shared/data/collectionCache';
+import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
+import { imageThumb } from '@/shared/lib/imageUrl';
+import { describeFirebaseError } from '@/shared/firebase/firebaseError';
+import { openWhatsApp as openWhatsAppChat, isWhatsAppReady } from '@/shared/lib/phone';
 import { secondHandLabelData, syncLabelSnapshot } from '../../utils/labelSync';
 
 const SecondHandList = () => {

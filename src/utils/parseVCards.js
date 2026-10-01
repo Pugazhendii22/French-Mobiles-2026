@@ -9,7 +9,7 @@
    "+91 98765 43210" matches one typed as "9876543210".
 ────────────────────────────────────────────── */
 
-import { normalizeIndianPhone } from './phone';
+import { normalizeIndianPhone } from '@/shared/lib/phone';
 
 // Re-exported for the screens that already import it from here.
 export { normalizeIndianPhone };

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { useNavigate } from 'react-router-dom';
-import Layout from '../../components/common/Layout';
-import { openWhatsApp } from '../../utils/phone';
+import Layout from '@/shared/ui/Layout';
+import { openWhatsApp } from '@/shared/lib/phone';
 
 const DuePaymentsPage = () => {
   const navigate = useNavigate();

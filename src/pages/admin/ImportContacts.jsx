@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { collection, writeBatch, doc } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { useAuth } from '../../context/AuthContext';
-import Layout from '../../components/common/Layout';
-import { Section } from '../../components/common/ui';
+import Layout from '@/shared/ui/Layout';
+import { Section } from '@/shared/ui/ui';
 import { buildCustomerImport } from '../../utils/parseVCards';
 import { loadCustomers, refreshCustomers } from '../../utils/customerCache';
 

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { auth, db, secondaryAuth } from '../../firebase/firebase';
+import { auth, db, secondaryAuth } from '@/shared/firebase/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { Navigate, useNavigate } from 'react-router-dom';
-import Layout from '../../components/common/Layout';
-import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
+import Layout from '@/shared/ui/Layout';
+import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
 
 const StaffManagement = () => {
   const { currentUser, userRole } = useAuth();

@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { generateInvoiceHTML } from '../../utils/generateInvoiceHTML';
 import { useSettings } from '../../context/SettingsContext';
 import { useAuth } from '../../context/AuthContext';
-import Layout from '../../components/common/Layout';
-import { Section, MoneyRow, Chip, InfoRow, InfoGrid } from '../../components/common/ui';
+import Layout from '@/shared/ui/Layout';
+import { Section, MoneyRow, Chip, InfoRow, InfoGrid } from '@/shared/ui/ui';
 import { paymentChipClass, isFinanceMethod } from '../../utils/paymentMethods';
 
 const SalesView = () => {

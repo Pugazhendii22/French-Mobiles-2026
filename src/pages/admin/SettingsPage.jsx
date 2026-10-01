@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useSettings } from '../../context/SettingsContext'
-import { uploadImageToCloudinary } from '../../utils/uploadImage'
-import { imageThumb } from '../../utils/imageUrl';
+import { uploadImageToCloudinary } from '@/shared/lib/uploadImage'
+import { imageThumb } from '@/shared/lib/imageUrl';
 
 const sections = [
   { key: 'complaint_types', label: 'Complaint Types', icon: 'fa-tools', color: '#ED2939' },

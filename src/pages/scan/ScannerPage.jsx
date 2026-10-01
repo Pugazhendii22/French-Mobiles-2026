@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import BarcodeScannerModal from '../../components/common/BarcodeScannerModal';
+import BarcodeScannerModal from '@/shared/components/BarcodeScannerModal';
 import { lookupLabel } from '../../utils/lookupLabel';
 import { lookupTac } from '../../utils/tacLookup';
 

@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { doc, getDoc, updateDoc, collection, query, where, limit, getDocs } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { creditWallet } from '../../utils/walletUtils';
 import { loadCustomers, rememberCustomer } from '../../utils/customerCache';
 import CustomerForm from './CustomerForm';
-import Layout from '../../components/common/Layout';
-import ImageModal from '../../components/common/ImageModal';
-import { imageThumb } from '../../utils/imageUrl';
-import { openWhatsApp } from '../../utils/phone';
+import Layout from '@/shared/ui/Layout';
+import ImageModal from '@/shared/ui/ImageModal';
+import { imageThumb } from '@/shared/lib/imageUrl';
+import { openWhatsApp } from '@/shared/lib/phone';
 
 const CustomerView = () => {
   const { id } = useParams();

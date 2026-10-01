@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { collection, getDocs, addDoc, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { Link, useNavigate } from 'react-router-dom';
-import Layout from '../../components/common/Layout';
+import Layout from '@/shared/ui/Layout';
 import CustomerForm from './CustomerForm';
 import { useAuth } from '../../context/AuthContext';
-import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
+import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
 import { loadCustomers, rememberCustomer, forgetCustomer } from '../../utils/customerCache';
 
 const Modal = ({ title, onClose, children }) => (

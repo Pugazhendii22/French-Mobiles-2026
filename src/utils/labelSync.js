@@ -14,7 +14,7 @@
 ────────────────────────────────────────────── */
 
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
-import { db } from '../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 
 /** The part of a second-hand mobile a label shows. */
 export const secondHandLabelData = (mobile = {}) => ({

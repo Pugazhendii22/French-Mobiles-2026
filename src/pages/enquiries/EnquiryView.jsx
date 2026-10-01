@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
-import { invalidateCollection } from '../../utils/collectionCache';
+import { db } from '@/shared/firebase/firebase';
+import { invalidateCollection } from '@/shared/data/collectionCache';
 import EnquiryForm from './EnquiryForm';
-import Layout from '../../components/common/Layout';
-import { openWhatsApp as openWhatsAppChat } from '../../utils/phone';
+import Layout from '@/shared/ui/Layout';
+import { openWhatsApp as openWhatsAppChat } from '@/shared/lib/phone';
 
 const EnquiryView = () => {
   const { id } = useParams();

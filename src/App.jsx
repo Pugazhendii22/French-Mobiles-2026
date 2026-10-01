@@ -2,8 +2,8 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
-import PWAInstallPrompt from './components/PWAInstallPrompt';
-import ErrorBoundary from './components/common/ErrorBoundary';
+import PWAInstallPrompt from '@/shared/ui/PWAInstallPrompt';
+import ErrorBoundary from '@/shared/ui/ErrorBoundary';
 
 // Lazy load components
 const Login = lazy(() => import('./pages/Login'));

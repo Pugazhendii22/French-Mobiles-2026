@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc, Timestamp } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { useAuth } from '../../context/AuthContext';
-import Layout from '../../components/common/Layout';
+import Layout from '@/shared/ui/Layout';
 import { checkAndResetTasks } from '../../utils/taskResetLogic';
 
 const MyTasks = () => {

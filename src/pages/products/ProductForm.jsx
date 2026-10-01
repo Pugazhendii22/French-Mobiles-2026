@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { collection, getDocs, addDoc, query, where, setDoc, updateDoc, doc } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { getLabelNumber } from '../../utils/getLabelNumber';
 import { generateLabelHTML } from '../../utils/printLabel.jsx';
 import PrinterSelector from '../../components/PrinterSelector';
-import { uploadImageToCloudinary } from '../../utils/uploadImage';
-import { imageThumb } from '../../utils/imageUrl';
+import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
+import { imageThumb } from '@/shared/lib/imageUrl';
 
 const generateSerialNumber = () => {
   const date = new Date()

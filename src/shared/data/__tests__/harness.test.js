@@ -5,9 +5,9 @@ import { describe, it, expect, vi } from 'vitest'
    readable message instead of a blank page. Tests have no such variables, so
    every suite that reaches the Firebase client through an import chain stubs
    it out. Nothing here touches the database. */
-vi.mock('@/firebase/firebase', () => ({ db: { __stub: true }, auth: {}, secondaryAuth: {} }))
+vi.mock('@/shared/firebase/firebase', () => ({ db: { __stub: true }, auth: {}, secondaryAuth: {} }))
 
-const { ttlFor } = await import('@/utils/collectionCache')
+const { ttlFor } = await import('@/shared/data/collectionCache')
 
 describe('test harness', () => {
   it('resolves imports through the @ alias', () => {
