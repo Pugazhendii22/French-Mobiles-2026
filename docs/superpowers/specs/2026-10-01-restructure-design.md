@@ -1,7 +1,8 @@
 # Restructuring French Mobiles — design
 
 Date: 2026-10-01
-Status: approved, ready for an implementation plan
+Status: approved. Step 0 and slice 1 (products) shipped - see the slice
+record below. Slices 2-10 await their own plans.
 
 ## Why
 
@@ -159,10 +160,15 @@ Firestore. This catches the plumbing mistakes that clicking through the UI
 does not — a write that no longer invalidates its cache, a query that lost a
 `where` clause.
 
-Every slice must also pass `npm run build` and `npm run lint`. These prove
-imports resolve and nothing is syntactically broken; they prove nothing about
-behaviour, which is what the data-module tests and the per-slice click-through
-are for.
+Every slice must also pass `npm run build`. These prove imports resolve and
+nothing is syntactically broken; they prove nothing about behaviour, which is
+what the data-module tests and the per-slice click-through are for.
+
+Lint is **file-scoped, not repo-wide**. `npm run lint` fails on the untouched
+baseline with 450 errors, 306 of them one rule (`react-hooks/error-boundaries`)
+that fights this codebase's style. So the gate is: every file a slice creates
+or moves ends at 0 eslint errors, checked with `npx eslint <paths>`. Fixing the
+repo-wide total is its own decision, not a tax on each slice.
 
 Each slice ships with a short manual checklist. For products: open the list,
 add a product, edit it, assign a label, preview the print, delete it.
@@ -208,6 +214,60 @@ restructuring damage. Each needs its own decision.
   This one *is* collapsed into a single function during the split: same
   result, one copy. It is the only intentional logic change in the plan.
 - The unbounded reads listed under Scope.
+
+## Products slice: shipped 2026-10-01
+
+Step 0 and slice 1 are done, on branch `restructure/skeleton-and-products`,
+six commits from `40ca7ee` to `f7393d7`. 44 tests, build passing, and every
+file the branch created or moved is eslint-clean. Repo-wide lint fell from
+450 errors to 427 — the slices clean up only what they touch.
+
+The feature went from three files of 1243 lines to eleven files, the largest
+being the form's hook at 202. Nothing in it exceeds 300.
+
+Both named behaviour changes shipped as designed: every products write now
+invalidates the cached list, and `buildProductData` is the document-building
+logic once instead of twice.
+
+**What the slice found that the spec did not predict:**
+
+- `ProductForm`'s `handleAssignLabel` and `handlePrintLabel` were dead — never
+  called — which makes the `addDoc` label write at the old line 277
+  unreachable. So there were only ever **two** live `label_registry` write
+  shapes, not three. Both are preserved in `features/labels/data.js` as
+  `createLabelEntry` and `createLabelEntryKeyedByNumber`.
+- Deleting `handlePrintLabel` left `assignedLabelNumber` write-only, so that
+  state went too. The label number still reaches the user through `saveStatus`.
+- `ProductList`'s `statusColor` and its `userRole` were also dead.
+- **Products cannot be deleted from the UI at all.** `ProductList` renders a
+  delete confirmation and defines `handleDelete`, but nothing ever sets a
+  delete target. `deleteProduct` exists in the data module, tested, for
+  whenever that gets wired up. This is a feature decision.
+- **Editing a product leaves its label snapshot stale.** `syncLabelSnapshot`
+  exists and inventory, service and scan all call it after saving; products
+  never did. Wiring it in would change behaviour — a reprinted product label
+  would start showing the corrected price — so it stays a decision.
+- Repo lint was never passing: 450 errors on the untouched baseline, 306 of
+  them one rule (`react-hooks/error-boundaries`) that fights this codebase's
+  style. The gate for every slice is therefore **file-scoped**: files the
+  slice creates or moves must end at 0 errors.
+- All 11 `no-undef` errors are `process` in `scripts/`; the eslint config
+  declares browser globals only.
+- `firebase.js` throws while being imported when the `VITE_FIREBASE_*`
+  variables are unset. Every test suite that reaches the Firebase client
+  through an import chain must stub it.
+
+**Carried into every later slice, learned here:**
+
+1. After moving files, resolve every relative import in `src/` against the
+   filesystem. A path-fragment search misses same-directory sibling imports
+   (`./counters`), and the build only reports the first one it hits.
+2. Derive a split component's props from the file, not from the plan. Two of
+   this plan's prop lists were wrong, and `eslint no-undef` is what caught the
+   one that would have thrown on the user's first keystroke.
+3. Verify a split line by line against the original: every significant line
+   of the old file must be present, prefixed, or one of the lines the dedupe
+   deliberately collapsed.
 
 ## Risks
 
