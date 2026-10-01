@@ -217,6 +217,32 @@ restructuring damage. Each needs its own decision.
   result, one copy. It is the only intentional logic change in the plan.
 - The unbounded reads listed under Scope.
 
+### Raised by the final review, deliberately not fixed
+
+- **An invalidate during an in-flight read is undone when that read resolves.**
+  `loadCollection`'s request writes `cache.set` and the freshness marker after
+  its `await`; `invalidateCollection` deletes the entry and the in-flight handle
+  but cannot stop the running promise. So a read that resolves after an
+  invalidate repopulates the cache it was meant to clear. This undercuts the
+  products cache-invalidation change: `SalesForm` resolves scanned barcodes
+  against the cached products list via `assignedLabelNumber`, so in the losing
+  interleaving a label you just printed is unfindable for one TTL. Not fixed
+  here because it is a pre-existing defect in caching infrastructure six screens
+  share, the fix is a per-collection generation counter, and the window is one
+  `getDocs` racing three serial round trips — the invalidate should essentially
+  always win. It wants its own change and its own tests.
+- **`collectionCache` configures a 5-minute TTL for `label_registry` that
+  nothing reads through the cache.** `LabelRegistryList` uses raw `getDocs`.
+  Vestigial config that will mislead the next reader.
+- **Chunk naming.** The folder-with-`index.jsx` pattern this spec mandates for
+  every oversized file makes Vite name the chunk after the file, so
+  `ProductForm`'s chunk is `index-*.js`. Harmless for one file; with the eight
+  more the restructure will create, build output and the browser's network panel
+  become unreadable. Fix is a `chunkFileNames` function that uses the parent
+  directory for `index` chunks — worth doing before the next big split.
+- **The products delete path is tested but unreachable**: `ConfirmDeleteModal`,
+  `deleteTarget`, `deleting` and `deleteProduct` all exist, nothing opens them.
+
 ## Products slice: shipped 2026-10-01
 
 Step 0 and slice 1 are done, on branch `restructure/skeleton-and-products`,
