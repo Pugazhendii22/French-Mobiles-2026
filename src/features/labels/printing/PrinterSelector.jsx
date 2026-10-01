@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { getPrinters, printLabelQZ } from '../utils/qzPrint'
+import { getPrinters, printLabelQZ } from './qzPrint'
 import qz from 'qz-tray'
-import { checkPrintServer, printLabelMobile, PRINT_SERVER_URL } from '../utils/mobilePrint'
-import { withPageRule } from '../utils/printLabel'
+import { checkPrintServer, printLabelMobile, PRINT_SERVER_URL } from './mobilePrint'
+import { withPageRule } from './printLabel'
 
 /* ─────────────────────────────────────────────
    PRINT DIALOG

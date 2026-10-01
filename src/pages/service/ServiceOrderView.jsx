@@ -4,15 +4,15 @@ import { doc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, setD
 import { db, auth } from '@/shared/firebase/firebase';
 import ServiceOrderForm from './ServiceOrderForm';
 import PatternLock from '@/shared/components/PatternLock';
-import { getLabelNumber } from '../../utils/getLabelNumber';
+import { getLabelNumber } from '@/features/labels/data';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import NewSaleModal from '../../components/sales/NewSaleModal';
-import { generateLabelHTML } from '../../utils/printLabel.jsx';
+import { generateLabelHTML } from '@/features/labels/printing/printLabel';
 import { creditWallet } from '../../utils/walletUtils';
 import { generateServiceJobCard } from '../../utils/generateServiceJobCard';
 import { generateServiceFinalBill } from '../../utils/generateServiceFinalBill';
-import PrinterSelector from '../../components/PrinterSelector';
+import PrinterSelector from '@/features/labels/printing/PrinterSelector';
 import ImageModal from '@/shared/ui/ImageModal';
 import Layout from '@/shared/ui/Layout';
 import { Section, InfoRow, InfoGrid, Chip } from '@/shared/ui/ui';
@@ -20,7 +20,7 @@ import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
 import { imageThumb } from '@/shared/lib/imageUrl';
 import { describeFirebaseError } from '@/shared/firebase/firebaseError';
 import { openWhatsApp as openWhatsAppChat } from '@/shared/lib/phone';
-import { serviceOrderLabelData, syncLabelSnapshot, withLiveLabelData } from '../../utils/labelSync';
+import { serviceOrderLabelData, syncLabelSnapshot, withLiveLabelData } from '@/features/labels/data';
 
 const STATUSES = ['Received', 'In Progress', 'Parts Awaiting', 'Awaiting Customer Approval', 'Returned'];
 const NON_COMPLETED_STATUSES = ['Received', 'In Progress', 'Parts Awaiting', 'Awaiting Customer Approval', 'Returned'];

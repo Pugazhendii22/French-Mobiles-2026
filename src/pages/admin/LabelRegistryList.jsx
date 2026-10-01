@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/shared/firebase/firebase';
 import Layout from '@/shared/ui/Layout';
-import { generateLabelHTML } from '../../utils/printLabel.jsx';
-import PrinterSelector from '../../components/PrinterSelector';
+import { generateLabelHTML } from '@/features/labels/printing/printLabel';
+import PrinterSelector from '@/features/labels/printing/PrinterSelector';
 import { useAuth } from '../../context/AuthContext';
 import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
 

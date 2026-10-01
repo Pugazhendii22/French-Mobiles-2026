@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { collection, getDocs, addDoc, query, where, setDoc, updateDoc, doc } from 'firebase/firestore';
 import { db } from '@/shared/firebase/firebase';
-import { getLabelNumber } from '../../utils/getLabelNumber';
-import { generateLabelHTML } from '../../utils/printLabel.jsx';
-import PrinterSelector from '../../components/PrinterSelector';
+import { getLabelNumber } from '@/features/labels/data';
+import { generateLabelHTML } from '@/features/labels/printing/printLabel';
+import PrinterSelector from '@/features/labels/printing/PrinterSelector';
 import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
 import { imageThumb } from '@/shared/lib/imageUrl';
 

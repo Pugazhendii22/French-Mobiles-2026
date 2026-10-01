@@ -10,7 +10,7 @@ import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
 import { imageThumb } from '@/shared/lib/imageUrl';
 import { describeFirebaseError } from '@/shared/firebase/firebaseError';
 import { openWhatsApp as openWhatsAppChat, isWhatsAppReady } from '@/shared/lib/phone';
-import { secondHandLabelData, syncLabelSnapshot } from '../../utils/labelSync';
+import { secondHandLabelData, syncLabelSnapshot } from '@/features/labels/data';
 
 const SecondHandList = () => {
   const { userRole } = useAuth();

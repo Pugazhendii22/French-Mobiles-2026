@@ -6,7 +6,7 @@ import PatternLock from '@/shared/components/PatternLock';
 import ImageModal from '@/shared/ui/ImageModal';
 import { useAuth } from '../../context/AuthContext';
 import { imageThumb } from '@/shared/lib/imageUrl';
-import { secondHandLabelData } from '../../utils/labelSync';
+import { secondHandLabelData } from '@/features/labels/data';
 
 const Badge = ({ children, color }) => (
   <span className={`rounded-full px-3 py-1 text-xs font-bold ${color}`}>

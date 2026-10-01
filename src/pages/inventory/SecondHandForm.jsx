@@ -5,16 +5,16 @@ import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import CustomerAutocomplete from '../../components/common/CustomerAutocomplete';
 import ImeiInput from '@/shared/components/ImeiInput';
-import { getLabelNumber } from '../../utils/getLabelNumber';
-import { generateLabelHTML } from '../../utils/printLabel.jsx';
-import PrinterSelector from '../../components/PrinterSelector';
+import { getLabelNumber } from '@/features/labels/data';
+import { generateLabelHTML } from '@/features/labels/printing/printLabel';
+import PrinterSelector from '@/features/labels/printing/PrinterSelector';
 import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
 import { generateSecondHandPurchaseForm } from '../../utils/generateSecondHandPurchaseForm';
 import SignaturePad from '../../components/common/SignaturePad';
 import { imageThumb } from '@/shared/lib/imageUrl';
 import { loadCustomers, rememberCustomer } from '../../utils/customerCache';
-import { recordTacIfNew } from '../../utils/tacLookup';
-import { secondHandLabelData } from '../../utils/labelSync';
+import { recordTacIfNew } from '@/features/labels/tacLookup';
+import { secondHandLabelData } from '@/features/labels/data';
 
 const generateSerialNumber = () => {
   const date = new Date()

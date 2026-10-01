@@ -7,14 +7,14 @@ import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import CustomerAutocomplete from '../../components/common/CustomerAutocomplete';
 import ImeiInput from '@/shared/components/ImeiInput';
-import { getLabelNumber } from '../../utils/getLabelNumber';
+import { getLabelNumber } from '@/features/labels/data';
 import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
-import { generateLabelHTML } from '../../utils/printLabel.jsx';
+import { generateLabelHTML } from '@/features/labels/printing/printLabel';
 import { generateServiceJobCard } from '../../utils/generateServiceJobCard';
-import PrinterSelector from '../../components/PrinterSelector';
+import PrinterSelector from '@/features/labels/printing/PrinterSelector';
 import { imageThumb } from '@/shared/lib/imageUrl';
 import { loadCustomers } from '../../utils/customerCache';
-import { recordTacIfNew } from '../../utils/tacLookup';
+import { recordTacIfNew } from '@/features/labels/tacLookup';
 
 const PatternLock = lazy(() => import('@/shared/components/PatternLock').catch(() => ({ default: () => <div className="text-red-500">Failed to load PatternLock</div> })));
 

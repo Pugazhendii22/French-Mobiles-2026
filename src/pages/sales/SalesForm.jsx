@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import CustomerAutocomplete from '../../components/common/CustomerAutocomplete';
 import SecondHandMobileSelector from '../../components/sales/SecondHandMobileSelector';
 import BarcodeScannerModal from '@/shared/components/BarcodeScannerModal';
-import { lookupLabel } from '../../utils/lookupLabel';
+import { lookupLabel } from '@/features/labels/data';
 import { describeFirebaseError } from '@/shared/firebase/firebaseError';
 import { Section, FieldError } from '@/shared/ui/ui';
 import { inputClass, labelClass, errorInput } from '@/shared/ui/uiTokens';
