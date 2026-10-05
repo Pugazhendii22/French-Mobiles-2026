@@ -45,6 +45,7 @@ const ProductForm = ({ onSave, onCancel, initialData = null }) => {
               fieldErrors={form.fieldErrors}
               setFieldErrors={form.setFieldErrors}
               nameRef={form.nameRef}
+              categoryOptions={form.categoryOptions}
             />
             <PricingStockSection
               formData={form.formData}

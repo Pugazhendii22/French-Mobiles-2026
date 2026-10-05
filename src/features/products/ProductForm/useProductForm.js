@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useSettings } from '@/context/SettingsContext';
 import { getLabelNumber, findLabel, createLabelEntryKeyedByNumber } from '@/features/labels/data';
 import { generateLabelHTML } from '@/features/labels/printing/printLabel';
 import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
@@ -20,6 +21,7 @@ const generateSerialNumber = () => {
    beside this one are presentation only. */
 export const useProductForm = ({ onSave, initialData }) => {
   const { currentUser } = useAuth();
+  const { fieldOptions, rememberOptions } = useSettings();
   const [formData, setFormData] = useState(initialData || {
     name: '',
     brand: '',
@@ -106,6 +108,7 @@ export const useProductForm = ({ onSave, initialData }) => {
       const newId = await onSave(data);
       if (newId) setLocalId(newId);
       setSaveStatus('saved');
+      await rememberOptions({ field_options: { product_category: data.category } });
     } catch (err) {
       setError(err.message);
       setSaveStatus('idle');
@@ -169,6 +172,7 @@ export const useProductForm = ({ onSave, initialData }) => {
 
       setSaveStatus(`Saved & Label #${nextLabel} Assigned ✓`);
       setLabelAssigned(true);
+      await rememberOptions({ field_options: { product_category: data.category } });
 
     } catch (error) {
       console.error("Save & Print error:", error);
@@ -186,6 +190,7 @@ export const useProductForm = ({ onSave, initialData }) => {
     saveStatus, isProcessing,
     showPrinterSelector, setShowPrinterSelector, labelHTMLContent,
     nameRef, salePriceRef, stockRef,
+    categoryOptions: fieldOptions.product_category || [],
     handleUpload, handleSubmit, handleSaveAndPrint,
   };
 };

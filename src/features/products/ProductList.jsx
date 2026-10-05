@@ -3,10 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import Layout from '@/shared/ui/Layout';
 import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
 import { describeFirebaseError } from '@/shared/firebase/firebaseError';
+import { useSettings } from '@/context/SettingsContext';
 import { listProducts, createProduct, updateProduct, deleteProduct } from './data';
 import ProductForm from './ProductForm';
 
 const ProductList = () => {
+  const { fieldOptions } = useSettings();
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -137,16 +139,9 @@ return (
               className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#002395]"
             >
               <option value="">All Categories</option>
-              <option value="Back Cover">Back Cover</option>
-              <option value="Battery">Battery</option>
-              <option value="Cable">Cable</option>
-              <option value="Charger">Charger</option>
-              <option value="Earphones">Earphones</option>
-              <option value="Memory Card">Memory Card</option>
-              <option value="Power Bank">Power Bank</option>
-              <option value="Screen Guard">Screen Guard</option>
-              <option value="Tempered Glass">Tempered Glass</option>
-              <option value="Other">Other</option>
+              {(fieldOptions.product_category || []).map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
             </select>
             <select
               value={statusFilter}

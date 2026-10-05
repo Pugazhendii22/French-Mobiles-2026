@@ -1,4 +1,6 @@
-const ProductDetailsSection = ({ formData, setFormData, fieldErrors, setFieldErrors, nameRef }) => (
+import ComboBox from '@/shared/ui/ComboBox'
+
+const ProductDetailsSection = ({ formData, setFormData, fieldErrors, setFieldErrors, nameRef, categoryOptions = [] }) => (
   <>
     {/* PRODUCT DETAILS */}
     <div>
@@ -41,23 +43,12 @@ const ProductDetailsSection = ({ formData, setFormData, fieldErrors, setFieldErr
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-            <select
+            <ComboBox
               value={formData.category}
-              onChange={e => setFormData({ ...formData, category: e.target.value })}
-              className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#002395] bg-white"
-            >
-              <option value="">Select Category</option>
-              <option value="Back Cover">Back Cover</option>
-              <option value="Battery">Battery</option>
-              <option value="Cable">Cable</option>
-              <option value="Charger">Charger</option>
-              <option value="Earphones">Earphones</option>
-              <option value="Memory Card">Memory Card</option>
-              <option value="Power Bank">Power Bank</option>
-              <option value="Screen Guard">Screen Guard</option>
-              <option value="Tempered Glass">Tempered Glass</option>
-              <option value="Other">Other</option>
-            </select>
+              onChange={v => setFormData({ ...formData, category: v })}
+              options={categoryOptions}
+              placeholder="Select or type a category"
+            />
           </div>
         </div>
         <div>
