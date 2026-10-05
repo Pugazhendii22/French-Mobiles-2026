@@ -1,0 +1,19 @@
+{
+  "name": "tvse-print-server",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Label print server for the shop PC: renders label HTML and sends it to the TVSE LP46 over TCP 9100",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "jimp": "^0.22.12",
+    "puppeteer": "^21.11.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

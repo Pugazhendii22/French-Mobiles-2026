@@ -132,12 +132,29 @@ export const checkPrintServer = async ({ controller, skipPrinter = false } = {})
     }
   }
 
-  const online = status.json?.printer?.online === true
+  const printer = status.json?.printer || {}
+
+  /* The server will not probe the printer while a label is going out, because
+     the probe opens the same port the job uses. "Busy" is therefore not an
+     answer about the printer - it is no answer, and must not read as offline.
+     Older print servers do not send `state`, hence the fallback. */
+  if (printer.state === 'busy' || printer.online == null) {
+    return {
+      pc: 'ok',
+      printer: 'unknown',
+      detail: printer.state === 'busy'
+        ? 'A label is printing right now; this one will queue behind it'
+        : `Shop PC is reachable; the printer did not report a state (${status.ms}ms)`,
+      ms: status.ms,
+    }
+  }
+
+  const online = printer.online === true
   return {
     pc: 'ok',
     printer: online ? 'online' : 'offline',
     detail: online
-      ? `Printer answering on ${status.json?.printer?.host || 'the printer address'} (${status.ms}ms)`
+      ? `Printer answering on ${printer.host || 'the printer address'} (${status.ms}ms)`
       : 'The PC is fine but the printer is not answering - check its power and cable',
     ms: status.ms,
   }
