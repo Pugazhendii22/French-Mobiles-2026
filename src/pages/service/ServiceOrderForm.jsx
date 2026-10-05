@@ -8,6 +8,7 @@ import { useSettings } from '../../context/SettingsContext';
 import CustomerAutocomplete from '../../components/common/CustomerAutocomplete';
 import ImeiInput from '@/shared/components/ImeiInput';
 import ComboBox from '@/shared/ui/ComboBox';
+import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 import { getLabelNumber } from '@/features/labels/data';
 import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
 import { generateLabelHTML } from '@/features/labels/printing/printLabel';
@@ -36,6 +37,9 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
   const LOCK_TYPES = ['None', 'PIN', 'Password', 'Pattern', 'Fingerprint', 'Face Unlock', 'Other'];
   const ACCESSORIES_OPTIONS = accessoryOptions;
   const MODELS = modelOptions;
+
+  /* The grab handle promises this sheet can be pulled down; make it true. */
+  const { sheetProps, handleProps, scrollRef } = useSheetDismiss({ onDismiss: onCancel });
   const COMPLAINTS = complaintTypeOptions;
   const STATUSES = ['Received', 'In Progress', 'Parts Awaiting', 'Completed', 'Awaiting Customer Approval', 'Returned'];
 
@@ -595,10 +599,13 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
   try {
     return (
       <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center animate-fade-in">
-        <div className="bg-[#f1f5f9] w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col h-[94dvh] md:h-auto md:max-h-[90vh] overflow-hidden">
+        <div
+          {...sheetProps}
+          className="bg-[#f1f5f9] w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col h-[94dvh] md:h-auto md:max-h-[90vh] overflow-hidden"
+        >
 
-          {/* Grab handle */}
-          <div className="md:hidden flex justify-center pt-2.5 pb-1 flex-shrink-0 bg-white">
+          {/* Grab handle - drag it down to close */}
+          <div {...handleProps} aria-label="Drag down to close" className="md:hidden flex justify-center pt-2.5 pb-2 flex-shrink-0 bg-white">
             <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
           </div>
 
@@ -627,7 +634,7 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
           </div>
 
           {/* Scrollable content */}
-          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 space-y-3">
 
             {error && (
               <div className="bg-red-50 border border-red-200 text-[#ED2939] px-4 py-3 rounded-2xl text-sm font-medium">

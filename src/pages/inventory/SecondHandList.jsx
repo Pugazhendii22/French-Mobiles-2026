@@ -11,6 +11,7 @@ import { imageThumb } from '@/shared/lib/imageUrl';
 import { describeFirebaseError } from '@/shared/firebase/firebaseError';
 import { openWhatsApp as openWhatsAppChat, isWhatsAppReady } from '@/shared/lib/phone';
 import { secondHandLabelData, syncLabelSnapshot } from '@/features/labels/data';
+import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 
 /* ─────────────────────────────────────────────
    SECOND-HAND STOCK
@@ -63,6 +64,11 @@ const SecondHandList = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [whatsAppDialog, setWhatsAppDialog] = useState({ open: false });
   const [loadError, setLoadError] = useState('');
+
+  /* The WhatsApp confirmation is a sheet too - pull it down to skip sending. */
+  const {
+    sheetProps: waSheetProps, handleProps: waHandleProps, scrollRef: waScrollRef,
+  } = useSheetDismiss({ onDismiss: () => setWhatsAppDialog({ open: false }) });
 
   const fetchMobiles = async () => {
     try {
@@ -435,8 +441,15 @@ const SecondHandList = () => {
         {/* ── WHATSAPP PURCHASE CONFIRMATION ── */}
         {whatsAppDialog.open && (
           <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center animate-fade-in">
-            <div className="bg-white w-full md:max-w-lg md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col max-h-[90dvh] overflow-hidden pb-safe">
-              <div className="md:hidden flex justify-center pt-2.5 pb-1 flex-shrink-0">
+            <div
+              {...waSheetProps}
+              className="bg-white w-full md:max-w-lg md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col max-h-[90dvh] overflow-hidden pb-safe"
+            >
+              <div
+                {...waHandleProps}
+                aria-label="Drag down to close"
+                className="md:hidden flex justify-center pt-2.5 pb-2 flex-shrink-0"
+              >
                 <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
               </div>
               <div className="flex-shrink-0 px-4 pt-2 pb-3 border-b border-gray-100 flex items-center justify-between">
@@ -450,7 +463,7 @@ const SecondHandList = () => {
                   <i className="fas fa-times text-lg"></i>
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+              <div ref={waScrollRef} className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-3">
                 <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-sm text-gray-700 whitespace-pre-wrap">
                   {whatsAppDialog.message}
                 </div>

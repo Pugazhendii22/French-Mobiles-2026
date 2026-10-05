@@ -1,4 +1,5 @@
 import PrinterSelector from '@/features/labels/printing/PrinterSelector';
+import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 import { useProductForm } from './useProductForm';
 import ProductDetailsSection from './ProductDetailsSection';
 import PricingStockSection from './PricingStockSection';
@@ -9,12 +10,18 @@ import FormFooter from './FormFooter';
 const ProductForm = ({ onSave, onCancel, initialData = null }) => {
   const form = useProductForm({ onSave, initialData });
 
+  /* The grab handle promises this sheet can be pulled down; make it true. */
+  const { sheetProps, handleProps, scrollRef } = useSheetDismiss({ onDismiss: onCancel });
+
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center">
-      <div className="bg-white w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col max-h-[90vh]">
+      <div
+        {...sheetProps}
+        className="bg-white w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col max-h-[90vh]"
+      >
 
-        {/* Handle bar for mobile */}
-        <div className="md:hidden flex justify-center pt-3 pb-1 flex-shrink-0">
+        {/* Handle bar - drag it down to close */}
+        <div {...handleProps} aria-label="Drag down to close" className="md:hidden flex justify-center pt-3 pb-2 flex-shrink-0">
           <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
         </div>
 
@@ -31,7 +38,7 @@ const ProductForm = ({ onSave, onCancel, initialData = null }) => {
         </div>
 
         {/* Form Content */}
-        <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
           <form id="product-form" onSubmit={form.handleSubmit} className="space-y-5 pb-4">
             {form.error && (
               <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm">
