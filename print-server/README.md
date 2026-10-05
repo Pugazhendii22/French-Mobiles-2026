@@ -54,15 +54,35 @@ To go back: restore `server.js.bak` and restart.
 
 ## Settings
 
-All optional - the defaults are what the shop runs today.
+**Put this shop's real addresses in `config.json`, next to `server.js`.** Copy
+`config.example.json` to `config.json` and edit it:
 
-| Variable | Default |
-|---|---|
-| `PRINTER_HOST` | `192.168.1.251` |
-| `PRINTER_PORT` | `9100` |
-| `SERVER_PORT` | `3000` |
-| `CHROME_PATH` | the bundled Chrome under `C:\tvse-print-server\chrome\...` |
-| `ALLOW_RAW` | unset (raw printer commands refused) |
+```json
+{
+  "printerHost": "192.168.1.251",
+  "printerPort": 9100,
+  "serverPort": 3000
+}
+```
+
+That file is deliberately **not** part of an update and is not in git, so
+replacing `server.js` leaves your addresses alone - the defaults written into
+the code stop mattering once it exists. The startup line in `logs/server.log`
+says `"config":"config.json"` when it is being used, and names the printer
+address in use. A `config.json` that cannot be parsed is logged as an error and
+the server still starts on defaults, so a typo there does not look like a
+printer fault.
+
+Every setting can also come from an environment variable, which wins over the
+file:
+
+| Variable | `config.json` key | Default |
+|---|---|---|
+| `PRINTER_HOST` | `printerHost` | `192.168.1.251` |
+| `PRINTER_PORT` | `printerPort` | `9100` |
+| `SERVER_PORT` | `serverPort` | `3000` |
+| `CHROME_PATH` | `chromePath` | the bundled Chrome under `C:\tvse-print-server\chrome\...` |
+| `ALLOW_RAW` | `allowRaw` | off (raw printer commands refused) |
 
 `ALLOW_RAW=1` re-enables `mode:"raw"`, which sends submitted bytes straight to
 the printer. The app never uses it; it is off because anything able to reach

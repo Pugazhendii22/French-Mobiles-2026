@@ -55,17 +55,40 @@ const path = require("path");
 const crypto = require("crypto");
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const PRINTER_HOST = process.env.PRINTER_HOST || "192.168.1.251";
-const PRINTER_PORT = Number(process.env.PRINTER_PORT || 9100);
-const SERVER_PORT = Number(process.env.SERVER_PORT || 3000);
-const CHROME_PATH =
-  process.env.CHROME_PATH ||
-  "C:\\tvse-print-server\\chrome\\chrome\\win64-121.0.6167.85\\chrome-win64\\chrome.exe";
+
+/* config.json sits next to this file and is NOT part of an update: put this
+   shop's real addresses there once and replacing server.js leaves them alone.
+   Without it the defaults below apply, and an environment variable beats both.
+   See config.example.json. */
+const CONFIG_FILE = path.join(__dirname, "config.json");
+
+let fileConfig = {};
+let configError = null;
+try {
+  if (fs.existsSync(CONFIG_FILE)) {
+    fileConfig = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"));
+  }
+} catch (err) {
+  // Never refuse to start over a config file: fall back and say so loudly.
+  configError = err.message;
+}
+
+const setting = (envName, fileName, fallback) =>
+  process.env[envName] ?? fileConfig[fileName] ?? fallback;
+
+const PRINTER_HOST = String(setting("PRINTER_HOST", "printerHost", "192.168.1.251"));
+const PRINTER_PORT = Number(setting("PRINTER_PORT", "printerPort", 9100));
+const SERVER_PORT = Number(setting("SERVER_PORT", "serverPort", 3000));
+const CHROME_PATH = String(setting(
+  "CHROME_PATH",
+  "chromePath",
+  "C:\\tvse-print-server\\chrome\\chrome\\win64-121.0.6167.85\\chrome-win64\\chrome.exe"
+));
 
 /* Raw printer commands are an injection path - anything that can reach this
    port could drive the printer directly. The app never uses it, so it is off
    unless switched on deliberately. */
-const ALLOW_RAW = process.env.ALLOW_RAW === "1";
+const ALLOW_RAW = String(setting("ALLOW_RAW", "allowRaw", "")) === "1" || fileConfig.allowRaw === true;
 
 // Deadlines, all in ms
 const PROBE_TIMEOUT_MS = 3000;        // printer reachability check
@@ -615,7 +638,10 @@ const server = app.listen(SERVER_PORT, "0.0.0.0", () => {
     printer: `${PRINTER_HOST}:${PRINTER_PORT}`,
     address: lanAddress(),
     rawMode: ALLOW_RAW,
+    config: Object.keys(fileConfig).length ? "config.json" : "defaults",
   });
+  // A mistyped config file would otherwise look like a printer fault.
+  if (configError) log("error", "config.json could not be read - using defaults", { error: configError });
   console.log(`\n✅  TVSE Print Server on http://${lanAddress()}:${SERVER_PORT}`);
   console.log(`🖨️   Printer → ${PRINTER_HOST}:${PRINTER_PORT}`);
   console.log(`📋  GET /health  GET /status  POST /print  POST /test-print\n`);

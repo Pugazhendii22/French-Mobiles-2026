@@ -1,0 +1,7 @@
+{
+  "printerHost": "192.168.1.251",
+  "printerPort": 9100,
+  "serverPort": 3000,
+  "chromePath": "C:\\tvse-print-server\\chrome\\chrome\\win64-121.0.6167.85\\chrome-win64\\chrome.exe",
+  "allowRaw": false
+}
