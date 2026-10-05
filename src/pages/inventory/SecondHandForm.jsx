@@ -12,6 +12,7 @@ import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
 import { generateSecondHandPurchaseForm } from '../../utils/generateSecondHandPurchaseForm';
 import SignaturePad from '../../components/common/SignaturePad';
 import ComboBox from '@/shared/ui/ComboBox';
+import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 import { imageThumb } from '@/shared/lib/imageUrl';
 import { loadCustomers, rememberCustomer } from '../../utils/customerCache';
 import { recordTacIfNew } from '@/features/labels/tacLookup';
@@ -131,6 +132,10 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
     ramOptions = [], romOptions = [], fieldOptions = {}, rememberOptions
   } = useSettings();
   const MODELS = modelOptions;
+
+  /* The grab handle at the top of this sheet announced that it could be pulled
+     down; until now only Cancel actually closed it. */
+  const { sheetProps, handleProps, scrollRef } = useSheetDismiss({ onDismiss: onCancel });
 
   /* A scan-to-create flow (see ScannerPage) may hand us a recognised brand/model
      from the TAC database - only relevant for a brand-new record. The TAC data
@@ -713,10 +718,17 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center animate-fade-in">
-      <div className="bg-[#f1f5f9] w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col h-[94dvh] md:h-auto md:max-h-[90vh] overflow-hidden">
+      <div
+        {...sheetProps}
+        className="bg-[#f1f5f9] w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col h-[94dvh] md:h-auto md:max-h-[90vh] overflow-hidden"
+      >
 
-        {/* Grab handle */}
-        <div className="md:hidden flex justify-center pt-2.5 pb-1 flex-shrink-0 bg-white">
+        {/* Grab handle - drag it down to close */}
+        <div
+          {...handleProps}
+          className="md:hidden flex justify-center pt-2.5 pb-2 flex-shrink-0 bg-white"
+          aria-label="Drag down to close"
+        >
           <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
         </div>
 
@@ -752,7 +764,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
         </div>
 
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 space-y-3">
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-[#ED2939] px-4 py-3 rounded-2xl text-sm font-medium">
