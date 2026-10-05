@@ -172,3 +172,21 @@ describe('a near-miss value', () => {
     expect(onValue).not.toHaveBeenCalled()
   })
 })
+
+describe('disabled', () => {
+  it('does not open its list', () => {
+    const { input } = setup({ disabled: true })
+    fireEvent.focus(input)
+    expect(screen.queryByText('Samsung')).toBeNull()
+  })
+
+  it('marks the input disabled so it cannot be typed into', () => {
+    const { input } = setup({ disabled: true })
+    expect(input.disabled).toBe(true)
+  })
+
+  it('is enabled by default', () => {
+    const { input } = setup()
+    expect(input.disabled).toBe(false)
+  })
+})

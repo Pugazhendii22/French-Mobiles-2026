@@ -11,7 +11,7 @@ const MAX_VISIBLE = 50
 const squash = (s) => (s || '').toLowerCase().replace(/\s+/g, '')
 
 const ComboBox = ({
-  value, onChange, options = [], placeholder, required, error, inputRef, className = '', id,
+  value, onChange, options = [], placeholder, required, disabled, error, inputRef, className = '', id,
 }) => {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef(null)
@@ -49,6 +49,7 @@ const ComboBox = ({
 
   const base = 'w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none bg-white'
   const border = error ? 'border-[#ED2939]' : 'border-gray-300 focus:border-[#002395]'
+  const dim = disabled ? 'disabled:bg-gray-50 disabled:text-gray-400' : ''
 
   return (
     <div className="relative" ref={wrapRef}>
@@ -58,15 +59,16 @@ const ComboBox = ({
         type="text"
         value={value || ''}
         required={required}
+        disabled={disabled}
         placeholder={placeholder}
         autoComplete="off"
-        onFocus={() => setOpen(true)}
+        onFocus={() => { if (!disabled) setOpen(true) }}
         onChange={e => { onChange(e.target.value); setOpen(true) }}
         onKeyDown={onKeyDown}
-        className={`${base} ${border} ${className}`}
+        className={`${base} ${border} ${dim} ${className}`}
       />
 
-      {open && (
+      {open && !disabled && (
         <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
           {visible.map(option => (
             <div

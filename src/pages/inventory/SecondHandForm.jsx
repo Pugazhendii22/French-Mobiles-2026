@@ -11,6 +11,7 @@ import PrinterSelector from '@/features/labels/printing/PrinterSelector';
 import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
 import { generateSecondHandPurchaseForm } from '../../utils/generateSecondHandPurchaseForm';
 import SignaturePad from '../../components/common/SignaturePad';
+import ComboBox from '@/shared/ui/ComboBox';
 import { imageThumb } from '@/shared/lib/imageUrl';
 import { loadCustomers, rememberCustomer } from '../../utils/customerCache';
 import { recordTacIfNew } from '@/features/labels/tacLookup';
@@ -127,7 +128,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
   const {
     deviceChecklist, complaintTypes, shopDetails, purchaseTerms,
     brands: brandOptions = [], models: modelOptions = {},
-    ramOptions = [], romOptions = []
+    ramOptions = [], romOptions = [], fieldOptions = {}, rememberOptions
   } = useSettings();
   const MODELS = modelOptions;
 
@@ -241,12 +242,6 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
   const [localId, setLocalId] = useState(initialData?.id || null);
   const [saveStatus, setSaveStatus] = useState('idle');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [customModel, setCustomModel] = useState(
-    () => (!initialData && prefillData?.model && !prefillModelMatch) ? prefillData.model : ''
-  );
-  const [isCustomModel, setIsCustomModel] = useState(
-    () => !!(!initialData && prefillData?.model && !prefillModelMatch)
-  );
   const [conditionChecklist, setConditionChecklist] = useState({});
   const [brandInitialized, setBrandInitialized] = useState(false);
   const [showPrinterSelector, setShowPrinterSelector] = useState(false);
@@ -499,9 +494,6 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       const totalCost = purchasePrice + (wasRepaired ? repairCost : 0)
       const profit = salePrice - totalCost
       const finalData = { ...formData, conditionChecklist, wasRepaired, repairItems: wasRepaired ? repairItems : [], repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
-      if (finalData.brand === 'Other') {
-        finalData.brand = finalData.customBrand;
-      }
       delete finalData.customBrand;
 
       if (!initialData) {
@@ -515,6 +507,11 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       const newId = await onSave(finalData);
       if (newId) setLocalId(newId);
       setSaveStatus('saved');
+      await rememberOptions({
+        brands: finalData.brand,
+        models: { [finalData.brand]: finalData.model },
+        field_options: { supplier: finalData.supplier },
+      });
     } catch (err) {
       setError(err.message);
       setSaveStatus('idle');
@@ -539,9 +536,6 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       const profit = salePrice - totalCost
       const sellerSignatureUrl = await uploadSignature();
       const finalData = { ...formData, conditionChecklist, serialNumber: finalSerialNumber, wasRepaired, repairItems: wasRepaired ? repairItems : [], repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
-      if (finalData.brand === 'Other') {
-        finalData.brand = finalData.customBrand;
-      }
       delete finalData.customBrand;
 
       if (!initialData) {
@@ -554,6 +548,11 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
 
       const savedDocId = await onSave(finalData);
       if (savedDocId) setLocalId(savedDocId);
+      await rememberOptions({
+        brands: finalData.brand,
+        models: { [finalData.brand]: finalData.model },
+        field_options: { supplier: finalData.supplier },
+      });
 
       const nextLabel = await getLabelNumber();
       const labelData = {
@@ -766,88 +765,63 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
             <div className="space-y-3">
               <div ref={brandRef}>
                 <label className={labelClass}>Brand <span className="text-[#ED2939]">*</span></label>
-                <select required value={formData.brand} onChange={e => {
-                  const selectedBrand = e.target.value
-                  setFormData(prev => ({ ...prev, brand: selectedBrand, model: '' }))
-                  setCustomModel('')
-                  setIsCustomModel(false)
-                  if (fieldErrors.brand) setFieldErrors(prev => ({...prev, brand: ''}))
-                }} className={`${inputClass} ${fieldErrors.brand ? errorInput : ''}`}>
-                  <option value="">Select Brand</option>
-                  {BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
-                </select>
-                {formData.brand === 'Other' && (
-                  <input type="text" placeholder="Enter Custom Brand" required value={formData.customBrand || ''} onChange={e => setFormData({ ...formData, customBrand: e.target.value })} className={`${inputClass} mt-2`} />
-                )}
-                <FieldError message={fieldErrors.brand} />
+                <ComboBox
+                  required
+                  value={formData.brand}
+                  options={BRANDS}
+                  placeholder="Select or type a brand"
+                  error={fieldErrors.brand}
+                  onChange={v => {
+                    setFormData(prev => ({ ...prev, brand: v, model: '' }))
+                    if (fieldErrors.brand) setFieldErrors(prev => ({...prev, brand: ''}))
+                  }}
+                />
               </div>
 
               <div ref={modelRef}>
                 <label className={labelClass}>Model <span className="text-[#ED2939]">*</span></label>
-                <select
+                <ComboBox
                   required
-                  value={isCustomModel ? '__custom__' : formData.model}
-                  onChange={e => {
-                    if (e.target.value === '__custom__') {
-                      setIsCustomModel(true)
-                      setFormData(prev => ({ ...prev, model: '' }))
-                    } else {
-                      setIsCustomModel(false)
-                      setCustomModel('')
-                      setFormData(prev => ({ ...prev, model: e.target.value }))
-                    }
+                  value={formData.model}
+                  options={MODELS[formData.brand] || []}
+                  disabled={!formData.brand}
+                  placeholder={formData.brand ? 'Select or type a model' : 'Select brand first'}
+                  error={fieldErrors.model}
+                  onChange={v => {
+                    setFormData(prev => ({ ...prev, model: v }))
                     if (fieldErrors.model) setFieldErrors(prev => ({...prev, model: ''}))
                   }}
-                  disabled={!formData.brand}
-                  className={`${inputClass} disabled:bg-gray-50 disabled:text-gray-400 ${fieldErrors.model ? errorInput : ''}`}
-                >
-                  <option value="" disabled>{formData.brand ? 'Select model' : 'Select brand first'}</option>
-                  {formData.brand && (MODELS[formData.brand] || []).length === 0 && (
-                    <option value="" disabled>No models available</option>
-                  )}
-                  {(MODELS[formData.brand] || []).map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                  <option value="__custom__">Other (type manually)</option>
-                </select>
-                {isCustomModel && (
-                  <input
-                    type="text"
-                    placeholder="Type model name"
-                    value={customModel}
-                    onChange={e => {
-                      setCustomModel(e.target.value)
-                      setFormData(prev => ({ ...prev, model: e.target.value }))
-                      if (fieldErrors.model) setFieldErrors(prev => ({...prev, model: ''}))
-                    }}
-                    className={`${inputClass} mt-2`}
-                  />
-                )}
-                <FieldError message={fieldErrors.model} />
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div ref={ramRef}>
                   <label className={labelClass}>RAM <span className="text-[#ED2939]">*</span></label>
-                  <select required value={formData.ram} onChange={e => {
-                    setFormData({ ...formData, ram: e.target.value })
-                    if (fieldErrors.ram) setFieldErrors(prev => ({...prev, ram: ''}))
-                  }} className={`${inputClass} ${fieldErrors.ram ? errorInput : ''}`}>
-                    <option value="">Select</option>
-                    {ramOptions.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                  <FieldError message={fieldErrors.ram} />
+                  <ComboBox
+                    required
+                    value={formData.ram}
+                    options={ramOptions}
+                    placeholder="Select or type"
+                    error={fieldErrors.ram}
+                    onChange={v => {
+                      setFormData(prev => ({ ...prev, ram: v }))
+                      if (fieldErrors.ram) setFieldErrors(prev => ({...prev, ram: ''}))
+                    }}
+                  />
                 </div>
                 <div ref={romRef}>
                   <label className={labelClass}>ROM <span className="text-[#ED2939]">*</span></label>
-                  <select required value={formData.rom} onChange={e => {
-                    setFormData({ ...formData, rom: e.target.value })
-                    if (fieldErrors.rom) setFieldErrors(prev => ({...prev, rom: ''}))
-                  }} className={`${inputClass} ${fieldErrors.rom ? errorInput : ''}`}>
-                    <option value="">Select</option>
-                    {romOptions.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                  <FieldError message={fieldErrors.rom} />
+                  <ComboBox
+                    required
+                    value={formData.rom}
+                    options={romOptions}
+                    placeholder="Select or type"
+                    error={fieldErrors.rom}
+                    onChange={v => {
+                      setFormData(prev => ({ ...prev, rom: v }))
+                      if (fieldErrors.rom) setFieldErrors(prev => ({...prev, rom: ''}))
+                    }}
+                  />
                 </div>
               </div>
             </div>
@@ -949,7 +923,12 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
                 </div>
                 <div>
                   <label className={labelClass}>Supplier</label>
-                  <input type="text" value={formData.supplier} onChange={e => setFormData({ ...formData, supplier: e.target.value })} placeholder="Shop or person" className={inputClass} />
+                  <ComboBox
+                    value={formData.supplier}
+                    options={fieldOptions.supplier || []}
+                    placeholder="Shop or person"
+                    onChange={v => setFormData(prev => ({ ...prev, supplier: v }))}
+                  />
                 </div>
               </div>
             </div>

@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import CustomerAutocomplete from '../../components/common/CustomerAutocomplete';
 import ImeiInput from '@/shared/components/ImeiInput';
+import ComboBox from '@/shared/ui/ComboBox';
 import { getLabelNumber } from '@/features/labels/data';
 import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
 import { generateLabelHTML } from '@/features/labels/printing/printLabel';
@@ -29,7 +30,7 @@ const generateSerialNumber = () => {
 
 const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
   const { currentUser, userName, userRole } = useAuth();
-  const { complaintTypes: complaintTypeOptions = [], accessories: accessoryOptions = [], brands: brandOptions = [], models: modelOptions = {}, shopDetails } = useSettings();
+  const { complaintTypes: complaintTypeOptions = [], accessories: accessoryOptions = [], brands: brandOptions = [], models: modelOptions = {}, shopDetails, fieldOptions = {}, rememberOptions } = useSettings();
   const [staffOptions, setStaffOptions] = useState([]);
 
   const LOCK_TYPES = ['None', 'PIN', 'Password', 'Pattern', 'Fingerprint', 'Face Unlock', 'Other'];
@@ -55,12 +56,6 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     ? (MODELS[prefillBrand] || []).find(m => m.toLowerCase() === prefillData.model.toLowerCase())
     : null;
 
-  const [customModel, setCustomModel] = useState(
-    () => (!initialData && prefillData?.model && !prefillModelMatch) ? prefillData.model : ''
-  );
-  const [isCustomModel, setIsCustomModel] = useState(
-    () => !!(!initialData && prefillData?.model && !prefillModelMatch)
-  );
 
   const formatDateTimeLocal = (value) => {
     if (!value) return '';
@@ -331,9 +326,6 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     setError('');
     try {
       const finalData = { ...formData, createdBy: currentUser?.uid || '' };
-      if (finalData.brand === 'Other') {
-        finalData.brand = finalData.customBrand;
-      }
       delete finalData.customBrand;
       delete finalData.complaintNature;
       delete finalData.customComplaint;
@@ -373,6 +365,11 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       const newId = await onSave(finalData);
       if (newId) setLocalId(newId);
       setSaveStatus('saved');
+      await rememberOptions({
+        brands: finalData.brand,
+        models: { [finalData.brand]: finalData.model },
+        field_options: { colour: finalData.colour },
+      });
     } catch (err) {
       setError(err.message);
       setSaveStatus('idle');
@@ -390,9 +387,6 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
 
       // Step 2: Save service order to Firestore
       const finalData = { ...formData, createdBy: currentUser?.uid || '' };
-      if (finalData.brand === 'Other') {
-        finalData.brand = finalData.customBrand;
-      }
       delete finalData.customBrand;
       delete finalData.complaintNature;
       delete finalData.customComplaint;
@@ -431,6 +425,11 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
 
       const savedDocId = await onSave(finalData);
       if (savedDocId) setLocalId(savedDocId);
+      await rememberOptions({
+        brands: finalData.brand,
+        models: { [finalData.brand]: finalData.model },
+        field_options: { colour: finalData.colour },
+      });
 
       // Step 3: Auto assign next label number
       const nextLabel = await getLabelNumber();
@@ -641,69 +640,43 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
               <div className="space-y-3">
                 <div ref={brandRef}>
                   <label className={labelClass}>Brand <span className="text-[#ED2939]">*</span></label>
-                  <select required value={formData.brand} onChange={e => {
-                    const selectedBrand = e.target.value
-                    setFormData(prev => ({ ...prev, brand: selectedBrand, model: '' }))
-                    setCustomModel('')
-                    setIsCustomModel(false)
-                    if (fieldErrors.brand) setFieldErrors(prev => ({...prev, brand: ''}))
-                  }} className={`${inputClass} ${fieldErrors.brand ? errorInput : ''}`}>
-                    <option value="">Select Brand</option>
-                    {BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
-                  </select>
-                  {formData.brand === 'Other' && (
-                    <input type="text" placeholder="Enter Custom Brand" required value={formData.customBrand || ''} onChange={e => setFormData({ ...formData, customBrand: e.target.value })} className={`${inputClass} mt-2`} />
-                  )}
-                  <FieldError message={fieldErrors.brand} />
+                  <ComboBox
+                    required
+                    value={formData.brand}
+                    options={BRANDS}
+                    placeholder="Select or type a brand"
+                    error={fieldErrors.brand}
+                    onChange={v => {
+                      setFormData(prev => ({ ...prev, brand: v, model: '' }))
+                      if (fieldErrors.brand) setFieldErrors(prev => ({...prev, brand: ''}))
+                    }}
+                  />
                 </div>
 
                 <div ref={modelRef}>
                   <label className={labelClass}>Model <span className="text-[#ED2939]">*</span></label>
-                  <select
+                  <ComboBox
                     required
-                    value={isCustomModel ? '__custom__' : formData.model}
-                    onChange={e => {
-                      if (e.target.value === '__custom__') {
-                        setIsCustomModel(true)
-                        setFormData(prev => ({ ...prev, model: '' }))
-                      } else {
-                        setIsCustomModel(false)
-                        setCustomModel('')
-                        setFormData(prev => ({ ...prev, model: e.target.value }))
-                      }
+                    value={formData.model}
+                    options={MODELS[formData.brand] || []}
+                    disabled={!formData.brand}
+                    placeholder={formData.brand ? 'Select or type a model' : 'Select brand first'}
+                    error={fieldErrors.model}
+                    onChange={v => {
+                      setFormData(prev => ({ ...prev, model: v }))
                       if (fieldErrors.model) setFieldErrors(prev => ({...prev, model: ''}))
                     }}
-                    disabled={!formData.brand}
-                    className={`${inputClass} disabled:bg-gray-50 disabled:text-gray-400 ${fieldErrors.model ? errorInput : ''}`}
-                  >
-                    <option value="" disabled>{formData.brand ? 'Select model' : 'Select brand first'}</option>
-                    {formData.brand && (MODELS[formData.brand] || []).length === 0 && (
-                      <option value="" disabled>No models available</option>
-                    )}
-                    {(MODELS[formData.brand] || []).map(m => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                    <option value="__custom__">Other (type manually)</option>
-                  </select>
-                  {isCustomModel && (
-                    <input
-                      type="text"
-                      placeholder="Type model name"
-                      value={customModel}
-                      onChange={e => {
-                        setCustomModel(e.target.value)
-                        setFormData(prev => ({ ...prev, model: e.target.value }))
-                        if (fieldErrors.model) setFieldErrors(prev => ({...prev, model: ''}))
-                      }}
-                      className={`${inputClass} mt-2`}
-                    />
-                  )}
-                  <FieldError message={fieldErrors.model} />
+                  />
                 </div>
 
                 <div>
                   <label className={labelClass}>Colour</label>
-                  <input type="text" value={formData.colour} onChange={e => setFormData({ ...formData, colour: e.target.value })} className={inputClass} />
+                  <ComboBox
+                    value={formData.colour}
+                    options={fieldOptions.colour || []}
+                    placeholder="Select or type a colour"
+                    onChange={v => setFormData(prev => ({ ...prev, colour: v }))}
+                  />
                 </div>
 
                 <div ref={imei1Ref}>
