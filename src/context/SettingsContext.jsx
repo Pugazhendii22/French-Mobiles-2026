@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect } from 'react'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '@/shared/firebase/firebase'
 
@@ -96,6 +96,14 @@ const DEFAULT_SETTINGS = {
     Tecno: ['Tecno Spark 10', 'Tecno Spark 20', 'Tecno Pop 7', 'Tecno Camon 20'],
     Infinix: ['Infinix Hot 20', 'Infinix Hot 30', 'Infinix Note 12', 'Infinix Note 30'],
     Others: []
+  },
+  field_options: {
+    supplier: [],
+    colour: ['Black', 'White', 'Blue', 'Red', 'Gold', 'Silver', 'Green'],
+    product_category: [
+      'Back Cover', 'Battery', 'Cable', 'Charger', 'Earphones',
+      'Memory Card', 'Power Bank', 'Screen Guard', 'Tempered Glass', 'Other',
+    ],
   },
   ram_options: {
     items: ["1GB", "2GB", "3GB", "4GB", "6GB", "8GB", "12GB", "16GB"]
@@ -201,10 +209,6 @@ export const SettingsProvider = ({ children }) => {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    loadSettings()
-  }, [])
-
   const loadSettings = async () => {
     try {
       const cached = localStorage.getItem(CACHE_KEY)
@@ -218,7 +222,7 @@ export const SettingsProvider = ({ children }) => {
         }
       }
 
-      const keys = ['complaint_types', 'pre_delivery_checklist', 'brands', 'accessories', 'models', 'ram_options', 'rom_options', 'device_checklist', 'shop_details']
+      const keys = ['complaint_types', 'pre_delivery_checklist', 'brands', 'accessories', 'models', 'ram_options', 'rom_options', 'device_checklist', 'shop_details', 'field_options']
       const docs = await Promise.all(
         keys.map(key => getDoc(doc(db, 'settings', key)))
       )
@@ -260,9 +264,17 @@ export const SettingsProvider = ({ children }) => {
     }
   }
 
+  /* Load the shop's settings once, on mount. loadSettings only sets state after
+     awaiting, but the rule traces the call and cannot see that; the same pattern
+     and the same note are on every list screen in this app. */
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadSettings()
+  }, [])
+
   const updateSetting = async (key, items) => {
     try {
-      if (key === 'models') {
+      if (key === 'models' || key === 'field_options') {
         await setDoc(doc(db, 'settings', key), items)
       } else if (key === 'device_checklist') {
         await setDoc(doc(db, 'settings', key), items)
@@ -271,7 +283,7 @@ export const SettingsProvider = ({ children }) => {
       } else {
         await setDoc(doc(db, 'settings', key), { items })
       }
-      const newSettings = { ...settings, [key]: key === 'models' || key === 'device_checklist' || key === 'shop_details' ? items : { items } }
+      const newSettings = { ...settings, [key]: key === 'models' || key === 'field_options' || key === 'device_checklist' || key === 'shop_details' ? items : { items } }
       setSettings(newSettings)
       localStorage.setItem(CACHE_KEY, JSON.stringify({
         data: newSettings,
@@ -304,6 +316,7 @@ export const SettingsProvider = ({ children }) => {
         ramOptions: settings.ram_options?.items || ["2GB", "3GB", "4GB", "6GB", "8GB", "12GB", "16GB"],
         romOptions: settings.rom_options?.items || ["16GB", "32GB", "64GB", "128GB", "256GB", "512GB"],
         deviceChecklist: settings.device_checklist || { common: [], iphone: [], android: [] },
+        fieldOptions: { ...DEFAULT_SETTINGS.field_options, ...(settings.field_options || {}) },
         purchaseTerms: (settings.shop_details?.purchase_terms) || DEFAULT_SETTINGS.shop_details.purchase_terms
       }}
     >
