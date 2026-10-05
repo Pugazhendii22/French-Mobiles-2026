@@ -1,5 +1,21 @@
-import { describe, it, expect } from 'vitest'
-import { normalizeOption, findExisting, planOptionWrites } from '@/features/settings/options'
+import { describe, it, expect, vi } from 'vitest'
+
+vi.mock('@/shared/firebase/firebase', () => ({ db: { __db: true } }))
+
+const fsMocks = vi.hoisted(() => ({
+  updateDoc: vi.fn(async () => undefined),
+  arrayUnion: vi.fn((v) => ({ __arrayUnion: v })),
+}))
+
+vi.mock('firebase/firestore', () => ({
+  doc: (_db, coll, id) => ({ __doc: `${coll}/${id}` }),
+  updateDoc: fsMocks.updateDoc,
+  arrayUnion: fsMocks.arrayUnion,
+}))
+
+const {
+  normalizeOption, findExisting, planOptionWrites, applyOptionWrites,
+} = await import('@/features/settings/options')
 
 const known = {
   brands: ['Samsung', 'Apple'],
@@ -139,5 +155,77 @@ describe('an empty request', () => {
     expect(planOptionWrites({ brands: 'Nokia' }, {})).toEqual([
       { docKey: 'brands', field: 'items', value: 'Nokia' },
     ])
+  })
+})
+
+describe('applyOptionWrites', () => {
+  it('writes nothing when there is nothing to write', async () => {
+    fsMocks.updateDoc.mockClear()
+    expect(await applyOptionWrites([])).toBe(true)
+    expect(fsMocks.updateDoc).not.toHaveBeenCalled()
+  })
+
+  it('appends to a flat list with arrayUnion, never setDoc', async () => {
+    fsMocks.updateDoc.mockClear()
+    await applyOptionWrites([{ docKey: 'brands', field: 'items', value: 'Nokia' }])
+
+    expect(fsMocks.updateDoc).toHaveBeenCalledWith(
+      { __doc: 'settings/brands' },
+      { items: { __arrayUnion: 'Nokia' } },
+    )
+  })
+
+  it('appends a model under its brand key', async () => {
+    fsMocks.updateDoc.mockClear()
+    await applyOptionWrites([{ docKey: 'models', field: 'Nokia', value: 'Nokia G42' }])
+
+    expect(fsMocks.updateDoc).toHaveBeenCalledWith(
+      { __doc: 'settings/models' },
+      { Nokia: { __arrayUnion: 'Nokia G42' } },
+    )
+  })
+})
+
+/* Review Focus 4: a model under a brand with no list yet. arrayUnion creates
+   the field, so the brand and its first model can be written together. */
+describe('a brand-new brand and its first model', () => {
+  it('writes both, the model keyed by the new brand', async () => {
+    fsMocks.updateDoc.mockClear()
+    await applyOptionWrites(planOptionWrites(
+      { brands: 'Nokia', models: { Nokia: 'Nokia G42' } },
+      { brands: ['Samsung'], models: { Samsung: [] }, field_options: {} },
+    ))
+
+    expect(fsMocks.updateDoc).toHaveBeenCalledTimes(2)
+    expect(fsMocks.updateDoc).toHaveBeenCalledWith(
+      { __doc: 'settings/brands' }, { items: { __arrayUnion: 'Nokia' } },
+    )
+    expect(fsMocks.updateDoc).toHaveBeenCalledWith(
+      { __doc: 'settings/models' }, { Nokia: { __arrayUnion: 'Nokia G42' } },
+    )
+  })
+})
+
+/* Review Focus 3: filing a brand name must never block selling a phone. */
+describe('a failed write', () => {
+  it('is swallowed and reported as false, never thrown', async () => {
+    fsMocks.updateDoc.mockClear()
+    fsMocks.updateDoc.mockRejectedValueOnce(new Error('permission-denied'))
+
+    await expect(
+      applyOptionWrites([{ docKey: 'brands', field: 'items', value: 'Nokia' }])
+    ).resolves.toBe(false)
+  })
+
+  it('leaves the other writes attempted rather than stopping at the first', async () => {
+    fsMocks.updateDoc.mockClear()
+    fsMocks.updateDoc.mockRejectedValueOnce(new Error('permission-denied'))
+
+    await applyOptionWrites([
+      { docKey: 'brands', field: 'items', value: 'Nokia' },
+      { docKey: 'models', field: 'Nokia', value: 'Nokia G42' },
+    ])
+
+    expect(fsMocks.updateDoc).toHaveBeenCalledTimes(2)
   })
 })

@@ -9,6 +9,9 @@
    tested without a database.
 ────────────────────────────────────────────── */
 
+import { doc, updateDoc, arrayUnion } from 'firebase/firestore'
+import { db } from '@/shared/firebase/firebase'
+
 /** Trimmed, with runs of inner whitespace collapsed. Casing is left alone. */
 export const normalizeOption = (value) =>
   String(value ?? '').trim().replace(/\s+/g, ' ')
@@ -52,4 +55,28 @@ export const planOptionWrites = (requested = {}, known = {}) => {
   })
 
   return writes
+}
+
+/**
+ * Append each planned value to its list.
+ *
+ * arrayUnion rather than a whole-document write: two staff adding a brand in
+ * the same minute must both succeed, and a setDoc would let one silently
+ * overwrite the other. It also creates a missing field, so a model under a
+ * brand-new brand needs no special case.
+ *
+ * Never throws. Filing a brand name must not be able to fail the sale the
+ * person just made.
+ */
+export const applyOptionWrites = async (writes = []) => {
+  if (!writes.length) return true
+  try {
+    await Promise.all(writes.map(({ docKey, field, value }) =>
+      updateDoc(doc(db, 'settings', docKey), { [field]: arrayUnion(value) })
+    ))
+    return true
+  } catch (err) {
+    console.error('Could not save new option(s):', err)
+    return false
+  }
 }

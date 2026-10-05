@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { planOptionWrites, applyOptionWrites } from '@/features/settings/options'
 import { db } from '@/shared/firebase/firebase'
 
 const SettingsContext = createContext()
@@ -295,6 +296,35 @@ export const SettingsProvider = ({ children }) => {
     }
   }
 
+  /* Record any option values a saved record introduced. Called from a form's
+     save path, never on blur - an abandoned form must not leave its typing in
+     everyone's dropdowns. Does nothing, and costs nothing, when every value is
+     already on its list. */
+  const rememberOptions = async (requested) => {
+    const known = {
+      brands: settings.brands?.items || [],
+      models: settings.models || {},
+      field_options: settings.field_options || {},
+    }
+    const writes = planOptionWrites(requested, known)
+    if (!writes.length) return
+
+    const ok = await applyOptionWrites(writes)
+    if (!ok) return
+
+    const next = { ...settings }
+    writes.forEach(({ docKey, field, value }) => {
+      if (docKey === 'brands') {
+        next.brands = { items: [...(next.brands?.items || []), value] }
+      } else {
+        next[docKey] = { ...(next[docKey] || {}) }
+        next[docKey][field] = [...(next[docKey][field] || []), value]
+      }
+    })
+    setSettings(next)
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ data: next, timestamp: Date.now() }))
+  }
+
   const clearCache = async () => {
     localStorage.removeItem(CACHE_KEY)
     await loadSettings()
@@ -306,6 +336,7 @@ export const SettingsProvider = ({ children }) => {
         settings,
         loading,
         updateSetting,
+        rememberOptions,
         clearCache,
         shopDetails: { ...DEFAULT_SETTINGS.shop_details, ...settings.shop_details },
         complaintTypes: settings.complaint_types?.items || [],
