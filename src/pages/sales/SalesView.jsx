@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import Layout from '@/shared/ui/Layout';
 import { Section, MoneyRow, Chip, InfoRow, InfoGrid } from '@/shared/ui/ui';
 import { paymentChipClass, isFinanceMethod } from '../../utils/paymentMethods';
+import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 
 const SalesView = () => {
   const { id } = useParams();
@@ -15,6 +16,7 @@ const SalesView = () => {
   const { shopDetails } = useSettings();
   const { currentUser, userDisplayName, userRole } = useAuth();
   const [sale, setSale] = useState(null);
+  const { sheetProps: dueSheet, handleProps: dueHandle } = useSheetDismiss({ onDismiss: () => setShowDueDialog(false) });
   const [loading, setLoading] = useState(true);
   const [printing, setPrinting] = useState(false);
   const [showDueDialog, setShowDueDialog] = useState(false);
@@ -248,8 +250,8 @@ const SalesView = () => {
         {/* ── DUE PAYMENT SHEET ── */}
         {showDueDialog && (
           <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center animate-fade-in">
-            <div className="bg-white w-full md:max-w-md rounded-t-3xl md:rounded-2xl overflow-hidden shadow-2xl pb-safe">
-              <div className="md:hidden flex justify-center pt-2.5 pb-1">
+            <div {...dueSheet} className="bg-white w-full md:max-w-md rounded-t-3xl md:rounded-2xl overflow-hidden shadow-2xl pb-safe">
+              <div {...dueHandle} aria-label="Drag down to close" className="md:hidden flex justify-center pt-2.5 pb-1">
                 <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
               </div>
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">

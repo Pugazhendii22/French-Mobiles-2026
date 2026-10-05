@@ -21,6 +21,7 @@ import { imageThumb } from '@/shared/lib/imageUrl';
 import { describeFirebaseError } from '@/shared/firebase/firebaseError';
 import { openWhatsApp as openWhatsAppChat } from '@/shared/lib/phone';
 import { serviceOrderLabelData, syncLabelSnapshot, withLiveLabelData } from '@/features/labels/data';
+import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 
 const STATUSES = ['Received', 'In Progress', 'Parts Awaiting', 'Awaiting Customer Approval', 'Returned'];
 const NON_COMPLETED_STATUSES = ['Received', 'In Progress', 'Parts Awaiting', 'Awaiting Customer Approval', 'Returned'];
@@ -31,6 +32,13 @@ const ServiceOrderView = () => {
   const { userRole, currentUser, userName } = useAuth();
   const { shopDetails, preDeliveryChecklist = [] } = useSettings();
   const [order, setOrder] = useState(null);
+
+  /* These short dialogs have no grab handle, so no handle is added: the whole
+     dialog answers a downward swipe instead. They have nothing to scroll, so
+     the gesture cannot be confused with scrolling. */
+  const { sheetProps: billSheet } = useSheetDismiss({ onDismiss: () => setBillModalOpen(false) });
+  const { sheetProps: ratingSheet } = useSheetDismiss({ onDismiss: handleSkipRating });
+  const { sheetProps: doneSheet, handleProps: doneHandle, scrollRef: doneScroll } = useSheetDismiss({ onDismiss: () => setShowCompleteModal(false) });
   const [loading, setLoading] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
@@ -1069,8 +1077,8 @@ const ServiceOrderView = () => {
           {/* ── PRE-DELIVERY CHECKLIST ── */}
           {showCompleteModal && order && (
             <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center animate-fade-in">
-              <div className="bg-[#f1f5f9] w-full md:max-w-md md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col h-[90dvh] md:h-auto md:max-h-[90vh] overflow-hidden">
-                <div className="md:hidden flex justify-center pt-2.5 pb-1 bg-white">
+              <div {...doneSheet} className="bg-[#f1f5f9] w-full md:max-w-md md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col h-[90dvh] md:h-auto md:max-h-[90vh] overflow-hidden">
+                <div {...doneHandle} aria-label="Drag down to close" className="md:hidden flex justify-center pt-2.5 pb-1 bg-white">
                   <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
                 </div>
                 <div className="flex justify-between items-center px-4 pt-2 pb-3 border-b border-gray-100 bg-white">
@@ -1083,7 +1091,7 @@ const ServiceOrderView = () => {
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto min-h-0 px-3 py-3 space-y-3">
+                <div ref={doneScroll} className="flex-1 overflow-y-auto min-h-0 px-3 py-3 space-y-3">
                   {completeError && (
                     <div className="bg-red-50 border border-red-200 text-[#ED2939] px-4 py-3 rounded-2xl text-sm font-medium">
                       <i className="fas fa-exclamation-circle mr-2"></i>{completeError}
@@ -1141,7 +1149,7 @@ const ServiceOrderView = () => {
           {ratingModalOpen && ratingDataForModal && (
             <div className="fixed z-50 inset-0 bg-black/60 flex items-end md:items-center justify-center animate-fade-in">
               <div className="fixed inset-0" onClick={handleSkipRating}></div>
-              <div className="relative bg-white w-full md:max-w-md rounded-t-3xl md:rounded-2xl p-5 z-10 pb-safe">
+              <div {...ratingSheet} className="relative bg-white w-full md:max-w-md rounded-t-3xl md:rounded-2xl p-5 z-10 pb-safe">
                 <h3 className="text-lg font-bold text-[#0f172a] mb-1">Send Rating Link</h3>
                 <p className="text-gray-500 mb-3 text-sm">
                   <strong className="text-[#0f172a]">{ratingDataForModal.customerName}</strong>
@@ -1170,7 +1178,7 @@ const ServiceOrderView = () => {
           {billModalOpen && (completedOrderForBill || order) && (
             <div className="fixed z-50 inset-0 bg-black/60 flex items-end md:items-center justify-center animate-fade-in">
               <div className="fixed inset-0" onClick={() => setBillModalOpen(false)}></div>
-              <div className="relative bg-white w-full md:max-w-sm rounded-t-3xl md:rounded-2xl p-5 z-10 text-center pb-safe">
+              <div {...billSheet} className="relative bg-white w-full md:max-w-sm rounded-t-3xl md:rounded-2xl p-5 z-10 text-center pb-safe">
                 <div className="w-14 h-14 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-3">
                   <i className="fas fa-check text-xl"></i>
                 </div>

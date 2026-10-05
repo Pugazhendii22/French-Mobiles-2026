@@ -7,6 +7,7 @@ import CustomerForm from './CustomerForm';
 import { useAuth } from '../../context/AuthContext';
 import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
 import { loadCustomers, rememberCustomer, forgetCustomer } from '../../utils/customerCache';
+import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 
 const Modal = ({ title, onClose, children }) => (
   <div className="fixed inset-0 z-50 bg-black/50 overflow-y-auto flex items-start justify-center p-4">
@@ -33,6 +34,9 @@ const CustomerList = () => {
   const [showModal, setShowModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  /* The grab handle promises this sheet can be pulled down; make it true. */
+  const { sheetProps, handleProps, scrollRef } = useSheetDismiss({ onDismiss: () => setShowModal(false) });
 
   const fetchCustomers = async () => {
     try {
@@ -207,9 +211,9 @@ const CustomerList = () => {
     {/* FORM MODAL */}
     {showModal && (
       <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center">
-        <div className="bg-white w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col max-h-[90vh]">
+        <div {...sheetProps} className="bg-white w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col max-h-[90vh]">
           {/* Modal handle */}
-          <div className="md:hidden flex justify-center pt-3 pb-1 flex-shrink-0">
+          <div {...handleProps} aria-label="Drag down to close" className="md:hidden flex justify-center pt-3 pb-1 flex-shrink-0">
             <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
           </div>
           {/* Modal header - fixed */}
@@ -227,7 +231,7 @@ const CustomerList = () => {
             </div>
           </div>
           {/* Modal content - scrollable */}
-          <div className="flex-1 overflow-y-auto px-4 py-4">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
             <CustomerForm
               onSave={handleSaveCustomer}
               onCancel={() => setShowModal(false)}

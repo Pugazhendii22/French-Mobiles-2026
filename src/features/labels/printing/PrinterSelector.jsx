@@ -3,6 +3,7 @@ import { getPrinters, printLabelQZ } from './qzPrint'
 import qz from 'qz-tray'
 import { checkPrintServer, printLabelMobile, PRINT_SERVER_URL } from './mobilePrint'
 import { withPageRule } from './printLabel'
+import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 
 /* ─────────────────────────────────────────────
    PRINT DIALOG
@@ -39,6 +40,9 @@ const PrinterSelector = ({ isOpen, onClose, htmlContent, labelEntry, title = 'Pr
   const [checking, setChecking] = useState(false)
   const [sending, setSending] = useState(false)
   const [uncertain, setUncertain] = useState('')
+
+  /* The grab handle promises this sheet can be pulled down; make it true. */
+  const { sheetProps, handleProps, scrollRef } = useSheetDismiss({ onDismiss: onClose });
 
   /* Only the newest check may write to state; the rest are stale by definition. */
   const checkIdRef = useRef(0)
@@ -231,8 +235,8 @@ const PrinterSelector = ({ isOpen, onClose, htmlContent, labelEntry, title = 'Pr
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center">
-      <div className="bg-white w-full md:max-w-sm md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col">
-        <div className="md:hidden flex justify-center pt-3 pb-1 flex-shrink-0">
+      <div {...sheetProps} className="bg-white w-full md:max-w-sm md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col">
+        <div {...handleProps} aria-label="Drag down to close" className="md:hidden flex justify-center pt-3 pb-1 flex-shrink-0">
           <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
         </div>
         <div className="flex-shrink-0 px-4 pt-3 pb-3 border-b border-gray-100">
@@ -298,7 +302,7 @@ const PrinterSelector = ({ isOpen, onClose, htmlContent, labelEntry, title = 'Pr
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Select Printer
                 </label>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
+                <div ref={scrollRef} className="space-y-2 max-h-48 overflow-y-auto">
                   {printers.length === 0 ? (
                     <p className="text-sm text-gray-400 text-center py-4">
                       No printers found

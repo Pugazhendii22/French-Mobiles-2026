@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useSettings } from '../../context/SettingsContext'
 import { uploadImageToCloudinary } from '@/shared/lib/uploadImage'
 import { imageThumb } from '@/shared/lib/imageUrl';
+import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 
 const sections = [
   { key: 'complaint_types', label: 'Complaint Types', icon: 'fa-tools', color: '#ED2939' },
@@ -19,6 +20,9 @@ const SettingsPage = () => {
   const { currentUser, userRole } = useAuth()
   const { settings, updateSetting, clearCache, shopDetails } = useSettings()
   const [newItemText, setNewItemText] = useState({})
+
+  /* The grab handle promises this sheet can be pulled down; make it true. */
+  const { sheetProps, handleProps, scrollRef } = useSheetDismiss({ onDismiss: () => setEditModal({ open: false, key: "", index: -1, value: "" }) });
   const [editModal, setEditModal] = useState({ open: false, key: '', index: -1, value: '' })
   const [selectedModelBrand, setSelectedModelBrand] = useState('')
   const [newModelText, setNewModelText] = useState('')
@@ -673,8 +677,8 @@ const SettingsPage = () => {
 
       {editModal.open && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center">
-          <div className="bg-white w-full md:max-w-lg md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col max-h-[90vh]">
-            <div className="md:hidden flex justify-center pt-3 pb-1 flex-shrink-0">
+          <div {...sheetProps} className="bg-white w-full md:max-w-lg md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col max-h-[90vh]">
+            <div {...handleProps} aria-label="Drag down to close" className="md:hidden flex justify-center pt-3 pb-1 flex-shrink-0">
               <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
             </div>
             <div className="flex-shrink-0 px-4 pt-3 pb-3 border-b border-gray-100">
@@ -685,7 +689,7 @@ const SettingsPage = () => {
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto px-4 py-4">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
               <input
                 type="text"
                 value={editModal.value}

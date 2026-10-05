@@ -1,3 +1,4 @@
+import { useSheetDismiss } from './useSheetDismiss';
 /* ─────────────────────────────────────────────
    SHARED UI KIT
    The design language introduced on the Second-Hand screens, in one place
@@ -70,11 +71,17 @@ export const MoneyRow = ({ label, value, strong = false, tone, divider = false }
 );
 
 /* Bottom-sheet shell: full height on phones, centred dialog on desktop. */
-export const Sheet = ({ title, subtitle, badge, onClose, footer, children }) => (
-  <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center animate-fade-in">
-    <div className="bg-[#f1f5f9] w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col h-[94dvh] md:h-auto md:max-h-[90vh] overflow-hidden">
+export const Sheet = ({ title, subtitle, badge, onClose, footer, children }) => {
+  const { sheetProps, handleProps, scrollRef } = useSheetDismiss({ onDismiss: onClose });
 
-      <div className="md:hidden flex justify-center pt-2.5 pb-1 flex-shrink-0 bg-white">
+  return (
+  <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center animate-fade-in">
+    <div
+      {...sheetProps}
+      className="bg-[#f1f5f9] w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col h-[94dvh] md:h-auto md:max-h-[90vh] overflow-hidden"
+    >
+
+      <div {...handleProps} aria-label="Drag down to close" className="md:hidden flex justify-center pt-2.5 pb-2 flex-shrink-0 bg-white">
         <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
       </div>
 
@@ -98,7 +105,7 @@ export const Sheet = ({ title, subtitle, badge, onClose, footer, children }) => 
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">{children}</div>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 space-y-3">{children}</div>
 
       {footer && (
         <div className="flex-shrink-0 px-4 py-3 border-t border-gray-100 bg-white pb-safe space-y-2">
@@ -107,7 +114,8 @@ export const Sheet = ({ title, subtitle, badge, onClose, footer, children }) => 
       )}
     </div>
   </div>
-);
+  );
+};
 
 /* Search + segmented status filter, shared by the list screens */
 export const SearchBar = ({ value, onChange, onClear, placeholder, id }) => (

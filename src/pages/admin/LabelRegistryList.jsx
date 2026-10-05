@@ -6,10 +6,16 @@ import { generateLabelHTML } from '@/features/labels/printing/printLabel';
 import PrinterSelector from '@/features/labels/printing/PrinterSelector';
 import { useAuth } from '../../context/AuthContext';
 import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
+import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 
 const LabelRegistryList = () => {
   const { userRole } = useAuth();
   const [labels, setLabels] = useState([]);
+
+  /* These short dialogs have no grab handle, so no handle is added: the whole
+     dialog answers a downward swipe instead. They have nothing to scroll, so
+     the gesture cannot be confused with scrolling. */
+  const { sheetProps: dialogSheet } = useSheetDismiss({ onDismiss: () => setEditingLabel(null) });
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingLabel, setEditingLabel] = useState(null);
@@ -123,7 +129,7 @@ const LabelRegistryList = () => {
 
         {editingLabel && (
           <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center p-4">
-            <div className="bg-white w-full md:max-w-lg rounded-t-3xl md:rounded-2xl overflow-hidden shadow-2xl">
+            <div {...dialogSheet} className="bg-white w-full md:max-w-lg rounded-t-3xl md:rounded-2xl overflow-hidden shadow-2xl">
               <div className="flex items-center justify-between px-5 py-4 bg-[#002395] text-white">
                 <h2 className="text-lg font-bold">Edit Label Number</h2>
                 <button onClick={() => setEditingLabel(null)} className="p-2 rounded-full hover:bg-white/20 transition">

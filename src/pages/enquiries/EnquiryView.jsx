@@ -6,6 +6,7 @@ import { invalidateCollection } from '@/shared/data/collectionCache';
 import EnquiryForm from './EnquiryForm';
 import Layout from '@/shared/ui/Layout';
 import { openWhatsApp as openWhatsAppChat } from '@/shared/lib/phone';
+import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 
 const EnquiryView = () => {
   const { id } = useParams();
@@ -14,6 +15,9 @@ const EnquiryView = () => {
   const [loading, setLoading] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
   const [converting, setConverting] = useState(false);
+
+  /* The grab handle promises this sheet can be pulled down; make it true. */
+  const { sheetProps, handleProps, scrollRef } = useSheetDismiss({ onDismiss: () => setShowEdit(false) });
 
   useEffect(() => {
     const fetchEnquiry = async () => {
@@ -179,8 +183,8 @@ return (
     {/* EDIT MODAL */}
     {showEdit && (
       <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center">
-        <div className="bg-white w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col max-h-[90vh]">
-          <div className="md:hidden flex justify-center pt-3 pb-1 flex-shrink-0">
+        <div {...sheetProps} className="bg-white w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col max-h-[90vh]">
+          <div {...handleProps} aria-label="Drag down to close" className="md:hidden flex justify-center pt-3 pb-1 flex-shrink-0">
             <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
           </div>
           <div className="flex-shrink-0 px-4 pt-3 pb-3 border-b border-gray-100 bg-white">
@@ -191,7 +195,7 @@ return (
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto px-4 py-4">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
             <EnquiryForm
               initialData={enquiry}
               onSave={handleUpdate}

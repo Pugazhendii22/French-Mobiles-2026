@@ -6,11 +6,17 @@ import { useAuth } from '../../context/AuthContext';
 import { Navigate, useNavigate } from 'react-router-dom';
 import Layout from '@/shared/ui/Layout';
 import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
+import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 
 const StaffManagement = () => {
   const { currentUser, userRole } = useAuth();
   const navigate = useNavigate();
   const [staff, setStaff] = useState([]);
+
+  /* These short dialogs have no grab handle, so no handle is added: the whole
+     dialog answers a downward swipe instead. They have nothing to scroll, so
+     the gesture cannot be confused with scrolling. */
+  const { sheetProps: dialogSheet } = useSheetDismiss({ onDismiss: () => setShowModal(false) });
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [newStaff, setNewStaff] = useState({ name: '', email: '', password: '', role: 'staff' });
@@ -158,7 +164,7 @@ const StaffManagement = () => {
 
         {showModal && (
           <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center p-4">
-            <div className="bg-white w-full md:max-w-lg rounded-t-3xl md:rounded-2xl overflow-hidden shadow-2xl">
+            <div {...dialogSheet} className="bg-white w-full md:max-w-lg rounded-t-3xl md:rounded-2xl overflow-hidden shadow-2xl">
               <div className="flex items-center justify-between px-5 py-4 bg-[#002395] text-white">
                 <h2 className="text-lg font-bold">Add Staff Member</h2>
                 <button onClick={() => setShowModal(false)} className="p-2 rounded-full hover:bg-white/20 transition">
