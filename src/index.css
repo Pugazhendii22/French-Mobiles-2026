@@ -153,6 +153,44 @@ input[type="date"]::-webkit-clear-button {
   display: none;
 }
 
+/* Same problem as the date field, different control. A select draws its own
+   arrow, and every engine draws a different one - a grey triangle here, a
+   double chevron there, a rounded button on Safari - so the one field that
+   happened to be a select never matched the ones around it.
+
+   The chevron below is ours, in the same brand blue as the calendar glyph. The
+   list that opens is still the browser's, deliberately: on a phone that is the
+   OS picker wheel, which beats anything we would draw and is accessible
+   without any work. What is normalised is the field it opens from. */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23002395' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.875rem center;
+  background-size: 18px 18px;
+}
+
+/* Room for the chevron, so a long option never runs underneath it. The
+   attribute selector is deliberate: these selects carry Tailwind's px-4, and a
+   bare `select` rule loses to a class on specificity - which is exactly what
+   happened, leaving the padding at 16px and the text running under the arrow. */
+select[class] {
+  padding-right: 2.75rem;
+}
+
+/* Safari keeps its own control unless this is said explicitly. */
+select::-ms-expand {
+  display: none;
+}
+
+/* A select with nothing chosen reads as a placeholder, like the date field. */
+select:invalid,
+select option[value=""] {
+  color: #94a3b8;
+}
+
 /* ─────────────────────────────────────────────
    HELPERS
 ────────────────────────────────────────────── */
