@@ -8,7 +8,7 @@ import Layout from '@/shared/ui/Layout';
 import { useAuth } from '../../context/AuthContext';
 import { loadCollection, invalidateCollection } from '@/shared/data/collectionCache';
 import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
-import { SearchBar, CollapsibleFilter, EmptyState, ListSkeleton, Chip } from '@/shared/ui/ui';
+import { SearchBar, CollapsibleFilter, EmptyState, ListSkeleton } from '@/shared/ui/ui';
 
 const SalesList = () => {
   const { userRole } = useAuth();
@@ -152,42 +152,54 @@ const SalesList = () => {
         ) : filteredSales.length === 0 ? (
           <EmptyState icon="fa-receipt" title="No sales found" hint="Try a different search or date range" />
         ) : (
-          <div className="space-y-3">
+          /* One sheet, hairline-separated, exactly as the stock list and the
+             service list are drawn. These were separate rounded cards floating on
+             the background, which fitted four to a phone screen where the other
+             two lists fit seven - and read as a different screen in the same app.
+
+             The spine down the left answers the one question a bill is scanned
+             for: is there still money on it. Green is settled, red is not. */
+          <div className="bg-white border border-[#E6EAF0] rounded-xl overflow-hidden">
             {filteredSales.map(sale => {
               const isPaid = !(sale.balanceDue > 0);
               return (
                 <Link
                   key={sale.id}
                   to={`/sales/${sale.id}`}
-                  className={`bg-white rounded-2xl border-l-4 shadow-sm p-3 block ${isPaid ? 'border-green-500' : 'border-[#ED2939]'}`}
+                  className="relative flex gap-3 pl-4 pr-3 py-2.5 border-b border-[#F1F4F9] last:border-0 block active:bg-[#F8FAFC] focus:outline-none focus:bg-[#F1F4F9]"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-bold text-[#002395] font-mono">{sale.invoiceNumber}</p>
-                      <p className="font-bold text-[#0f172a] text-sm mt-0.5 truncate">{sale.customerName}</p>
-                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                        <Chip className={
-                          sale.saleType === 'Second-hand' ? 'bg-[#002395]/10 text-[#002395]' :
-                          sale.saleType === 'Service' ? 'bg-purple-100 text-purple-700' :
-                          'bg-green-100 text-green-700'
-                        }>
-                          {sale.saleType || 'Sale'}
-                        </Chip>
-                        {sale.paymentMethod && <Chip>{sale.paymentMethod}</Chip>}
-                      </div>
-                      <p className="text-[#64748b] text-[11px] mt-1.5">
-                        {sale.createdAt?.toDate?.()?.toLocaleDateString('en-IN')}
-                      </p>
-                    </div>
+                  <span
+                    aria-hidden="true"
+                    className="absolute left-0 top-0 bottom-0 w-[3px]"
+                    style={{ background: isPaid ? '#16a34a' : '#ED2939' }}
+                  />
 
-                    <div className="text-right shrink-0">
-                      <p className="font-bold text-[#002395] text-base leading-tight">{money(sale.totalAmount)}</p>
-                      <span className={`inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                        isPaid ? 'bg-green-100 text-green-700' : 'bg-[#ED2939]/10 text-[#ED2939]'
-                      }`}>
-                        {isPaid ? 'Paid' : `Due ${money(sale.balanceDue)}`}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[11px] font-bold text-[#002395] font-mono shrink-0">
+                          {sale.invoiceNumber}
+                        </span>
+                        {!isPaid && (
+                          <span className="text-[10px] font-bold text-[#ED2939] shrink-0">
+                            {money(sale.balanceDue)} owed
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[15px] font-bold text-[#0F172A] tabular-nums shrink-0">
+                        {money(sale.totalAmount)}
                       </span>
                     </div>
+
+                    <p className="text-[15px] font-semibold leading-tight truncate mt-0.5 text-[#0F172A]">
+                      {sale.customerName}
+                    </p>
+
+                    <p className="text-[12px] text-[#64748B] leading-tight mt-0.5 truncate">
+                      {[sale.saleType || 'Sale', sale.paymentMethod,
+                        sale.createdAt?.toDate?.()?.toLocaleDateString('en-IN')]
+                        .filter(Boolean).join(' · ')}
+                    </p>
                   </div>
                 </Link>
               );
