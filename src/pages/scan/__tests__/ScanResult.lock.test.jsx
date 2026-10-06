@@ -31,6 +31,13 @@ const ORDER = {
   lockType: 'Pattern',
   lockPattern: LOCK_PATTERN,
   estimatedPrice: 1800,
+  /* The sections on this page are each conditional on their own data, so the
+     fixture has to carry enough for them to render at all. */
+  complaintTypes: ['Display replacement'],
+  problemDetails: 'Screen cracked across the top',
+  accessories: ['Charger', 'Back cover'],
+  suggestions: 'Advise a tempered glass',
+  imei1: '352099001761481',
 }
 
 vi.mock('firebase/firestore', () => ({
@@ -90,5 +97,37 @@ describe('the unlock pattern on the public scan page', () => {
     await waitFor(() => expect(patternIsShown()).toBe(true))
     for (const dot of screen.getAllByLabelText(/^Dot /)) expect(dot.disabled).toBe(true)
     expect(screen.queryByText('Clear')).toBeNull()
+  })
+})
+
+/* The eleven blocks on this page were re-nested when they became shared Sections.
+   JSX that compiles can still be nested wrongly - a Section closed in the wrong
+   place swallows everything after it - so this renders the page and checks the
+   sections and their contents actually arrive. A scan that lands here on a blank
+   page is indistinguishable, to whoever scanned it, from a scanner that does not
+   work. */
+describe('the page a scanned label lands on', () => {
+  it('renders the service order sections, with their contents', async () => {
+    auth.currentUser = { uid: 'staff-1' }
+    render(<ScanResult />)
+    await waitFor(() => expect(screen.getByText(/SRV-20261006-004/)).toBeTruthy())
+
+    for (const heading of ['Device Info', 'Issues Reported',
+                           'Accessories Collected', 'Notes & Suggestions']) {
+      expect(screen.getByText(heading)).toBeTruthy()
+    }
+
+    // Contents, not just the headings - a mis-nested Section loses these.
+    expect(screen.getByText('Ravi Kumar')).toBeTruthy()
+    expect(screen.getByText(/Galaxy A52/)).toBeTruthy()
+    expect(screen.getByText('352099001761481')).toBeTruthy()
+    expect(screen.getByText(/Advise a tempered glass/)).toBeTruthy()
+    expect(screen.getByText('Charger')).toBeTruthy()
+  })
+
+  it('shows the headings to someone not signed in too', async () => {
+    render(<ScanResult />)
+    await waitFor(() => expect(screen.getByText(/SRV-20261006-004/)).toBeTruthy())
+    expect(screen.getByText('Device Info')).toBeTruthy()
   })
 })
