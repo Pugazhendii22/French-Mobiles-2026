@@ -11,6 +11,7 @@ import { imageThumb } from '@/shared/lib/imageUrl';
 import { describeFirebaseError } from '@/shared/firebase/firebaseError';
 import { openWhatsApp as openWhatsAppChat, isWhatsAppReady } from '@/shared/lib/phone';
 import { secondHandLabelData, syncLabelSnapshot } from '@/features/labels/data';
+import { gradeOf } from '@/shared/ui/uiTokens';
 import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 
 /* ─────────────────────────────────────────────
@@ -28,16 +29,6 @@ import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
    Red is used for exactly one thing here: deleting. It is not a decoration,
    a border, or a label for "sold".
 ────────────────────────────────────────────── */
-
-/* Condition grades, worst to best readable at a glance. The spine colour and
-   the word come from the same place so they can never disagree. */
-const GRADES = {
-  A: { label: 'Like new', spine: '#16a34a' },
-  B: { label: 'Good',     spine: '#002395' },
-  C: { label: 'Fair',     spine: '#f97316' },
-  D: { label: 'Poor',     spine: '#ED2939' },
-};
-const gradeOf = (g) => GRADES[g] || { label: 'Ungraded', spine: '#cbd5e1' };
 
 const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 

@@ -19,7 +19,7 @@ export const Section = ({ icon, title, hint, action, tone = 'brand', children })
           </span>
           <div className="min-w-0">
             <h3 className="text-sm font-bold text-[#0f172a] leading-tight">{title}</h3>
-            {hint && <p className="text-xs text-gray-400 mt-0.5">{hint}</p>}
+            {hint && <p className="text-[12px] text-[#64748b] mt-0.5 leading-snug">{hint}</p>}
           </div>
         </div>
         {action}
