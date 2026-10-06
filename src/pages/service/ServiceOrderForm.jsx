@@ -148,22 +148,28 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     return JSON.stringify({ ...buildFreshForm(), ...draft }) !== pristine;
   });
 
-  /* What the form looked like when it was last written. Saving changes formData
-     - the saved id and serial number come back into it - which re-runs the
-     effect below, and without this comparison the draft would be written
-     straight back after being cleared. A saved order would then still greet the
-     next person with "picked up where you left off". */
-  const savedSnapshot = useRef(null);
+  /* What the form looked like when it was last written, or null if it never
+     was. Two things read it.
+
+     The draft keeps itself out of the way: without the comparison, the state
+     change a save causes would write the draft straight back after it had been
+     cleared, and a saved order would still greet the next person with "picked
+     up where you left off".
+
+     The footer reads it to tell saved from edited-since-saved. It is state and
+     not a ref for exactly that reason - a ref read during render is both a lint
+     error and a value React is not obliged to have refreshed. */
+  const [savedSnapshot, setSavedSnapshot] = useState(null);
 
   /* Keep what has been typed, as it is typed. Declared below formData: the
      dependency array is read during render, so referencing it any earlier
      throws before the form can draw. */
   useEffect(() => {
     const now = JSON.stringify(formData);
-    if (now === savedSnapshot.current) return;
+    if (now === savedSnapshot) return;
     if (now === pristine) { clearDraft(draftKey); return; }
     writeDraft(draftKey, formData);
-  }, [draftKey, formData, pristine]);
+  }, [draftKey, formData, pristine, savedSnapshot]);
 
   const startFresh = () => {
     clearDraft(draftKey);
@@ -417,8 +423,11 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
 
   /* Written, so the draft can stop being kept without the save's own changes to
      formData writing it straight back. */
-  const noteSaved = (finalData, savedId) => {
-    savedSnapshot.current = JSON.stringify({ ...formData, id: savedId || localId || formData.id });
+  const noteSaved = (finalData) => {
+    /* Exactly what is on screen at the moment it was written. Saving does not
+       alter formData, so anything that differs from this afterwards is an edit
+       somebody made and has not saved yet. */
+    setSavedSnapshot(JSON.stringify(formData));
     clearDraft(draftKey);
     setRestoredDraft(false);
     return rememberOptions({
@@ -450,7 +459,7 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       const newId = await onSave(finalData);
       if (newId) setLocalId(newId);
       setSaveStatus('saved');
-      await noteSaved(finalData, newId);
+      await noteSaved(finalData);
       return true;
     } catch (err) {
       setError(err.message);
@@ -474,7 +483,7 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
 
       const savedDocId = await onSave(finalData);
       if (savedDocId) setLocalId(savedDocId);
-      await noteSaved(finalData, savedDocId);
+      await noteSaved(finalData);
 
       // Step 3: Auto assign next label number
       const nextLabel = await getLabelNumber();
@@ -572,7 +581,13 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
 
   /* Saved, by either path. Both spellings are in use because Save & Print
      reports its label number through the same field. */
-  const justSaved = saveStatus === 'saved' || saveStatus.toLowerCase().includes('saved');
+  /* Saved AND untouched since. The old test was on saveStatus alone, which
+     stayed 'saved' while someone carried on typing - so the button sat there
+     reading "Saved ✓" over a form full of changes that were not saved at all,
+     and would not let you press it to save them. */
+  const exists = Boolean(initialData || localId);
+  const dirty = savedSnapshot === null || savedSnapshot !== JSON.stringify(formData);
+  const justSaved = !dirty;
   const busy = saveStatus === 'saving' || isProcessing || uploading;
 
   /* Printing saves first. Being unable to print a job card until the order had
@@ -581,7 +596,9 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
      save is bookkeeping that should happen on the way there. */
   const handlePrintJobCard = async () => {
     if (!validateAndScroll()) return;
-    if (!(await handleSubmit())) return;
+    // Only write if there is something to write; printing an unchanged order
+    // should not cost a save or move its updatedAt.
+    if (dirty && !(await handleSubmit())) return;
 
     const orderData = {
       orderNumber: formData.orderNumber || initialData?.orderNumber || '',
@@ -1118,12 +1135,12 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={busy}
+              disabled={busy || justSaved}
               className="w-full bg-[#002395] text-white rounded-xl py-3.5 text-sm font-bold disabled:opacity-50"
             >
               {saveStatus === 'saving' ? 'Saving…'
                 : justSaved ? 'Saved ✓'
-                  : initialData ? 'Save changes' : 'Create order'}
+                  : exists ? 'Save changes' : 'Create order'}
             </button>
 
             {!initialData && (
