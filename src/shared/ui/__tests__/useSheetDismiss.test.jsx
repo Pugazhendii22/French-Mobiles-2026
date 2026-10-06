@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
+import { useRef } from 'react'
 import { shouldDismiss, useSheetDismiss, CLOSE_MS } from '@/shared/ui/useSheetDismiss'
 
 beforeEach(() => { vi.useFakeTimers() })
@@ -39,16 +40,33 @@ describe('shouldDismiss', () => {
   })
 })
 
-/* A sheet shaped like the real ones: a handle, then a scrolling body. */
+/* A sheet shaped like the real ones: a handle, then a scrolling body.
+   `scrollTop` is how far down the body starts. The body's own touch handler
+   then scrolls it as the finger moves, which is what the browser does while a
+   finger drags scrollable content - and is what the hook watches to know when
+   the content has run out and the pull has begun. */
 const Sheet = ({ onDismiss, scrollTop = 0 }) => {
   const { sheetProps, handleProps, scrollRef } = useSheetDismiss({ onDismiss })
+  const last = useRef(null)
   return (
     <div {...sheetProps} data-testid="sheet">
       <div {...handleProps} data-testid="handle">grab</div>
       <div
         ref={el => {
           scrollRef.current = el
-          if (el) Object.defineProperty(el, 'scrollTop', { value: scrollTop, writable: true })
+          if (el) {
+            Object.defineProperty(el, 'scrollTop', {
+              value: scrollTop, writable: true, configurable: true,
+            })
+          }
+        }}
+        onTouchStart={e => { last.current = e.touches[0].clientY }}
+        onTouchMove={e => {
+          const y = e.touches[0].clientY
+          const el = scrollRef.current
+          // dragging down reveals what is above, so scrollTop falls
+          if (el) el.scrollTop = Math.max(0, el.scrollTop - (y - last.current))
+          last.current = y
         }}
         data-testid="body"
       >
@@ -145,5 +163,69 @@ describe('closing is animated, not instant', () => {
     expect(y).toBeGreaterThan(260)
 
     act(() => { vi.advanceTimersByTime(CLOSE_MS + 50) })
+  })
+})
+
+/* ─────────────────────────────────────────────
+   One gesture, from scrolling to pulling.
+
+   The real complaint: on a long form you had to scroll back to the top, let go,
+   and only then could you pull it down. A single drag should carry you through
+   both - which is what every native sheet does.
+
+   A finger drag scrolls the content exactly as far as it travels, so these
+   tests step the gesture the way a browser fires touchmove, and the body
+   scrolls under it.
+────────────────────────────────────────────── */
+const dragSteps = (el, { from, to, steps = 10 }) => {
+  fireEvent.touchStart(el, { touches: [{ clientY: from }] })
+  for (let i = 1; i <= steps; i++) {
+    fireEvent.touchMove(el, { touches: [{ clientY: from + ((to - from) * i) / steps }] })
+  }
+  fireEvent.touchEnd(el, { changedTouches: [{ clientY: to }] })
+  act(() => { vi.advanceTimersByTime(CLOSE_MS + 50) })
+}
+
+describe('dragging from partway down the form', () => {
+  /* 200px of form above, then 200px of pull: one gesture, and it closes. */
+  it('closes when one drag scrolls to the top and keeps going', () => {
+    const onDismiss = vi.fn()
+    render(<Sheet onDismiss={onDismiss} scrollTop={200} />)
+    dragSteps(screen.getByTestId('body'), { from: 20, to: 420 })
+    expect(onDismiss).toHaveBeenCalledTimes(1)
+  })
+
+  /* The guard that keeps a long form safe. Nothing above has run out, so this
+     is a scroll and only a scroll. */
+  it('only scrolls when the drag never reaches the top', () => {
+    const onDismiss = vi.fn()
+    render(<Sheet onDismiss={onDismiss} scrollTop={2000} />)
+    dragSteps(screen.getByTestId('body'), { from: 20, to: 420 })
+    expect(onDismiss).not.toHaveBeenCalled()
+  })
+
+  /* Arriving at the top is not a pull. Measuring from where the finger landed
+     rather than from the hand-off would close the sheet on every scroll that
+     happened to reach the top. */
+  it('does not close when the drag runs out exactly at the top', () => {
+    const onDismiss = vi.fn()
+    render(<Sheet onDismiss={onDismiss} scrollTop={400} />)
+    dragSteps(screen.getByTestId('body'), { from: 20, to: 420 })
+    expect(onDismiss).not.toHaveBeenCalled()
+  })
+
+  it('does not close when the pull after the top is only a nudge', () => {
+    const onDismiss = vi.fn()
+    render(<Sheet onDismiss={onDismiss} scrollTop={360} />)
+    /* 20px per step: the body runs out after 18 of them, leaving 40px of pull -
+       under the 70px a flick has to cover to count as one. */
+    dragSteps(screen.getByTestId('body'), { from: 20, to: 420, steps: 20 })
+    expect(onDismiss).not.toHaveBeenCalled()
+  })
+
+  it('leaves the sheet where it was when the gesture was only a scroll', () => {
+    render(<Sheet onDismiss={vi.fn()} scrollTop={2000} />)
+    dragSteps(screen.getByTestId('body'), { from: 20, to: 420 })
+    expect(screen.getByTestId('sheet').style.transform).toBeFalsy()
   })
 })

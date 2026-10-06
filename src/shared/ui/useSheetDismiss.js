@@ -7,10 +7,19 @@ import { useRef, useState, useCallback, useEffect } from 'react'
    sheet can be pulled down - but until now only the Cancel button closed it,
    so the handle was an affordance that lied.
 
-   The gesture is gated on scroll position on purpose: these sheets hold long
-   forms, and a downward drag halfway through one must scroll it rather than
-   throw away what was typed. Pulling from the handle always closes; pulling
-   from the body only closes when the body is already at the top.
+   One gesture, which changes hands partway through. A downward drag scrolls the
+   body while there is still form above you; the moment the body runs out of
+   content to scroll, the same unbroken drag takes over the sheet and pulls it
+   down. Pulling from the grab handle skips straight to that second part.
+
+   This is what the gesture used to get wrong. It was refused outright unless
+   the body was already at the top, so closing a long form took two separate
+   gestures - one to scroll back up, and another to pull down - and the grab
+   handle was the only thing that worked in one.
+
+   The distance is measured from where the hand-off happened, not from where the
+   finger first landed. Scrolling to the top and stopping there is not a pull,
+   and must not close anything.
 ────────────────────────────────────────────── */
 
 /** Pull this far and the sheet closes however slowly you did it. */
@@ -60,16 +69,38 @@ export const useSheetDismiss = ({ onDismiss, enabled = true } = {}) => {
     closeTimer.current = setTimeout(() => onDismiss?.(), CLOSE_MS)
   }, [onDismiss])
 
+  const atTop = () => (scrollRef.current?.scrollTop ?? 0) <= 0
+
   const start = useCallback((e, fromHandle) => {
     if (!enabled || !onDismiss) return
-    // Pulling the body only closes the sheet when there is nothing to scroll up to.
-    if (!fromHandle && (scrollRef.current?.scrollTop ?? 0) > 0) return
-    gesture.current = { y: e.touches[0].clientY, at: Date.now() }
+    const y = e.touches[0].clientY
+    /* `pullFrom` is where the sheet started being pulled, and null while the
+       body is still scrolling under the finger. From the handle, or from a body
+       with nothing above it, that is right here. */
+    gesture.current = {
+      pullFrom: (fromHandle || atTop()) ? y : null,
+      at: Date.now(),
+      lastY: y,
+    }
   }, [enabled, onDismiss])
 
   const move = useCallback((e) => {
-    if (!gesture.current) return
-    const distance = e.touches[0].clientY - gesture.current.y
+    const g = gesture.current
+    if (!g) return
+    const y = e.touches[0].clientY
+
+    if (g.pullFrom === null) {
+      /* Still scrolling. Nothing is dragged yet - but the moment the body runs
+         out of content above, this same gesture takes over the sheet, measured
+         from here so that arriving at the top is not itself a pull. */
+      gesture.current = atTop()
+        ? { ...g, pullFrom: y, at: Date.now(), lastY: y }
+        : { ...g, lastY: y }
+      return
+    }
+
+    gesture.current = { ...g, lastY: y }
+    const distance = y - g.pullFrom
     if (distance <= 0) { setOffset(0); setDragging(false); return }
     setDragging(true)
     // Resist a little, so the sheet feels attached rather than loose.
@@ -80,14 +111,16 @@ export const useSheetDismiss = ({ onDismiss, enabled = true } = {}) => {
     const g = gesture.current
     gesture.current = null
     setDragging(false)
-    if (!g) return
-    const distance = (e.changedTouches?.[0]?.clientY ?? g.y) - g.y
+    // No hand-off ever happened, so the whole gesture was a scroll.
+    if (!g || g.pullFrom === null) { setOffset(0); return }
+
+    const distance = (e.changedTouches?.[0]?.clientY ?? g.lastY) - g.pullFrom
     if (shouldDismiss({ distance, elapsedMs: Date.now() - g.at })) {
       close()
       return
     }
     setOffset(0)
-  }, [onDismiss, close])
+  }, [close])
 
   const sheetProps = {
     onTouchStart: (e) => start(e, false),
