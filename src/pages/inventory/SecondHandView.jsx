@@ -15,6 +15,7 @@ import { Section, InfoRow, InfoGrid, MoneyRow } from '@/shared/ui/ui';
 import { gradeOf } from '@/shared/ui/uiTokens';
 import { generateSecondHandPurchaseForm } from '../../utils/generateSecondHandPurchaseForm';
 import { imageThumb } from '@/shared/lib/imageUrl';
+import NewSaleModal from '@/components/sales/NewSaleModal';
 import { secondHandLabelData, syncLabelSnapshot, withLiveLabelData } from '@/features/labels/data';
 
 const groupByCategory = (items) => {
@@ -45,6 +46,8 @@ const SecondHandView = () => {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerUrl, setViewerUrl] = useState('');
   const [viewerTitle, setViewerTitle] = useState('');
+  /* Prefilled items for the sale sheet, or null while it is closed. */
+  const [sellOpen, setSellOpen] = useState(null);
 
   const fetchMobile = async () => {
     try {
@@ -220,21 +223,22 @@ const SecondHandView = () => {
             {isAvailable && (
               <button
                 onClick={() => {
-                  navigate('/sales', {
-                    state: {
-                      items: [
-                        {
-                          type: 'Second-hand',
-                          itemId: mobile.id,
-                          name: `${mobile.brand} ${mobile.model}`,
-                          quantity: 1,
-                          unitPrice: Number(mobile.salePrice || 0),
-                          purchaseCost: Number(mobile.purchasePrice || 0),
-                          repairCost: Number(mobile.repairCost || 0),
-                          imei: mobile.imei1 || ''
-                        }
-                      ]
-                    }
+                  /* The sale opens over this page. Leaving for /sales meant a
+                     mis-tap cost you the device you were looking at, and coming
+                     back landed on the list rather than here. */
+                  setSellOpen({
+                    items: [
+                      {
+                        type: 'Second-hand',
+                        itemId: mobile.id,
+                        name: `${mobile.brand} ${mobile.model}`,
+                        quantity: 1,
+                        unitPrice: Number(mobile.salePrice || 0),
+                        purchaseCost: Number(mobile.purchasePrice || 0),
+                        repairCost: Number(mobile.repairCost || 0),
+                        imei: mobile.imei1 || ''
+                      }
+                    ]
                   });
                 }}
                 className="w-full bg-[#16a34a] text-white py-3 rounded-xl text-[15px] font-bold"
@@ -559,6 +563,16 @@ const SecondHandView = () => {
 
         {showEdit && (
           <SecondHandForm initialData={mobile} onSave={handleUpdate} onCancel={() => setShowEdit(false)} />
+        )}
+
+        {/* Selling happens over this page, so closing it leaves you on the
+            device you were already looking at. */}
+        {sellOpen && (
+          <NewSaleModal
+            prefillData={sellOpen}
+            onClose={() => setSellOpen(null)}
+            onSuccess={() => { invalidateCollection('second_hand_mobiles'); fetchMobile(); }}
+          />
         )}
 
         <PrinterSelector
