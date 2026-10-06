@@ -703,7 +703,11 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
             )}
 
             {/* ── DEVICE ── */}
-            <Section icon="fa-mobile-alt" title="Device" hint="What came in for service">
+            <Section
+              icon="fa-mobile-alt"
+              title="Device"
+              hint="The handset itself. Take the IMEI off the phone rather than the box - it is what ties this order to this exact device."
+            >
               <div className="space-y-3">
                 <div ref={brandRef}>
                   <label className={labelClass}>Brand <span className="text-[#ED2939]">*</span></label>
@@ -842,7 +846,12 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
             </Section>
 
             {/* ── COMPLAINT ── */}
-            <Section icon="fa-triangle-exclamation" title="Issues & Complaints" hint="What the customer reported" tone="danger">
+            <Section
+              icon="fa-triangle-exclamation"
+              title="Issues & Complaints"
+              tone="danger"
+              hint="What the customer says is wrong, in their words. Pick every complaint that applies - the job card and the final bill are both built from these."
+            >
               <div className="space-y-3">
                 <div ref={complaintTypesRef}>
                   <label className={labelClass}>Complaint type <span className="text-[#ED2939]">*</span></label>
@@ -934,7 +943,11 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
             </Section>
 
             {/* ── PRICING ── */}
-            <Section icon="fa-indian-rupee-sign" title="Estimate & Costs">
+            <Section
+              icon="fa-indian-rupee-sign"
+              title="Estimate & Costs"
+              hint="What to quote the customer, and what the job costs the shop. Raw material and outside labour come off the estimate, which is how the profit at the bottom of this section is worked out."
+            >
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div ref={estimatedPriceRef}>
@@ -983,7 +996,11 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
             </Section>
 
             {/* ── SCHEDULE ── */}
-            <Section icon="fa-clock" title="Schedule & Technician">
+            <Section
+              icon="fa-clock"
+              title="Schedule & Technician"
+              hint="When it arrived, and when you are promising it back. The promised time is what marks the order overdue in the list, so leave yourself room."
+            >
               <div className="space-y-3">
                 <div ref={receivedAtRef}>
                   <label className={labelClass}>Received at <span className="text-[#ED2939]">*</span></label>
@@ -1035,7 +1052,11 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
             </Section>
 
             {/* ── LOCK ── */}
-            <Section icon="fa-lock" title="Lock & Security" hint="So the device can be opened for testing">
+            <Section
+              icon="fa-lock"
+              title="Lock & Security"
+              hint="How to open the device for testing. The lock type is printed on the job card for whoever picks the job up; the PIN, hint and pattern stay on screen for staff."
+            >
               <div className="space-y-3">
                 <div>
                   <label className={labelClass}>Lock type</label>
@@ -1079,7 +1100,11 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
             </Section>
 
             {/* ── CUSTOMER ── */}
-            <Section icon="fa-user" title="Customer">
+            <Section
+              icon="fa-user"
+              title="Customer"
+              hint="Who to call when it is ready. Start typing a name or number and anyone the shop has served before will come up, so nobody gets added twice."
+            >
               <CustomerAutocomplete
                 customers={customers}
                 nameValue={formData.customerName}

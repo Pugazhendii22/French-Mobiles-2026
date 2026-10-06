@@ -690,7 +690,12 @@ const ServiceOrderView = () => {
 
           {/* ── ISSUES ── */}
           {(order?.complaintTypes?.length > 0 || order?.complaintNature || order?.otherComplaint) && (
-            <Section icon="fa-triangle-exclamation" title="Issues Reported" tone="danger">
+            <Section
+              icon="fa-triangle-exclamation"
+              title="Issues Reported"
+              tone="danger"
+              hint="What the customer said was wrong when they handed it in. Anything you find on top of this is extra work - move the order to Awaiting Customer Approval rather than starting it."
+            >
               <div className="flex flex-wrap gap-2">
                 {order?.complaintTypes && order.complaintTypes.length > 0 ? (
                   Array.isArray(order.complaintTypes) ? order.complaintTypes.map((c, i) => (
@@ -724,6 +729,7 @@ const ServiceOrderView = () => {
               <Section
                 icon="fa-clock"
                 title="Time Tracking"
+                hint="When it arrived, and when it was promised back. The promised time is what turns this order red here and in the list, so agree a new one with the customer rather than quietly running late."
                 tone={overdue ? 'danger' : 'brand'}
                 action={overdue ? <Chip className="bg-[#ED2939] text-white">Overdue</Chip> : null}
               >
@@ -747,7 +753,11 @@ const ServiceOrderView = () => {
           )}
 
           {/* ── SERVICE DETAILS ── */}
-          <Section icon="fa-screwdriver-wrench" title="Service Details">
+          <Section
+            icon="fa-screwdriver-wrench"
+            title="Service Details"
+            hint="Who has the job, what the parts and outside work cost, and the numbers that identify this exact handset. Those costs come off the estimate, so they decide what the shop keeps."
+          >
             <InfoGrid>
               <InfoRow label="Technician" value={order?.technicianName} />
               <InfoRow label="Lock Type" value={order?.lockType && order?.lockType !== 'None' ? order?.lockType : undefined} />
@@ -907,7 +917,11 @@ const ServiceOrderView = () => {
 
           {/* ── ACCESSORIES ── */}
           {order?.accessories?.length > 0 && (
-            <Section icon="fa-plug" title="Accessories Collected">
+            <Section
+              icon="fa-plug"
+              title="Accessories Collected"
+              hint="What came in with the phone, and what has to go back with it. Check this against the bag before you hand the device over."
+            >
               <div className="flex flex-wrap gap-2">
                 {order.accessories.map((acc, i) => (
                   <span key={i} className="bg-[#002395]/10 text-[#002395] text-xs px-3 py-1.5 rounded-full font-semibold">
@@ -920,14 +934,22 @@ const ServiceOrderView = () => {
 
           {/* ── SUGGESTIONS ── */}
           {order?.suggestions && (
-            <Section icon="fa-note-sticky" title="Notes & Suggestions">
+            <Section
+              icon="fa-note-sticky"
+              title="Notes & Suggestions"
+              hint="Printed on the customer's final bill, so write it for them to read. Left empty, the bill says &quot;Service completed successfully.&quot;"
+            >
               <p className="text-sm text-gray-600 bg-gray-50 rounded-xl p-3">{order?.suggestions}</p>
             </Section>
           )}
 
           {/* ── DEVICE IMAGE ── */}
           {order?.imageUrl && (
-            <Section icon="fa-camera" title="Device Image">
+            <Section
+              icon="fa-camera"
+              title="Device Image"
+              hint="The condition it arrived in. This is what settles it if a customer says a mark was not there when they handed the phone over."
+            >
               {showDeviceImage ? (
                 <div className="relative">
                   <img
