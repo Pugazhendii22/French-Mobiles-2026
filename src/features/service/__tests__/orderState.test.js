@@ -3,6 +3,7 @@ import {
   normalizeDate, isClosed, isOverdue, isDueToday,
   stateOf, STATE_META, stateMetaOf, matchesTab, TABS,
   requireOrderDates, DATE_ERROR,
+  statusOptionsFor, STATUSES,
 } from '@/features/service/orderState'
 
 const NOW = new Date('2026-10-06T14:00:00')
@@ -184,5 +185,60 @@ describe('requireOrderDates', () => {
     const stamp = (iso) => ({ toDate: () => new Date(iso) })
     const { expected } = requireOrderDates(stamp('2026-10-06T10:00'), stamp('2026-10-08T17:00'))
     expect(expected.getDate()).toBe(8)
+  })
+})
+
+describe('statusOptionsFor', () => {
+  it('never offers Completed, to anyone', () => {
+    for (const current of STATUSES) {
+      expect(statusOptionsFor(current, { isAdmin: true })).not.toContain('Completed')
+      expect(statusOptionsFor(current, { isAdmin: false })).not.toContain('Completed')
+    }
+  })
+
+  it('gives an admin every open status', () => {
+    expect(statusOptionsFor('In Progress', { isAdmin: true })).toEqual([
+      'Received', 'In Progress', 'Parts Awaiting', 'Awaiting Customer Approval', 'Returned',
+    ])
+  })
+
+  it('will not send an order back to Received once it has moved on', () => {
+    expect(statusOptionsFor('In Progress')).not.toContain('Received')
+    expect(statusOptionsFor('Parts Awaiting')).not.toContain('Received')
+  })
+
+  it('offers Received while that is where the order still is', () => {
+    expect(statusOptionsFor('Received')).toContain('Received')
+  })
+
+  /* The dead end the old positional rule created. */
+  it('lets an approved order go back on the bench', () => {
+    const options = statusOptionsFor('Awaiting Customer Approval')
+    expect(options).toContain('In Progress')
+    expect(options).toContain('Parts Awaiting')
+  })
+
+  it('does not depend on where a status sits in the list', () => {
+    // Every active status reaches every other one, whatever the array order.
+    const active = ['In Progress', 'Parts Awaiting', 'Awaiting Customer Approval']
+    for (const from of active) {
+      for (const to of active) expect(statusOptionsFor(from)).toContain(to)
+    }
+  })
+
+  it('always includes where the order actually is', () => {
+    for (const current of STATUSES.filter(s => s !== 'Completed')) {
+      expect(statusOptionsFor(current)).toContain(current)
+    }
+  })
+
+  it('shows a status this build does not recognise rather than hiding it', () => {
+    expect(statusOptionsFor('Recieved')).toContain('Recieved')
+    expect(statusOptionsFor('Recieved')[0]).toBe('Recieved')
+  })
+
+  it('copes with no status at all', () => {
+    expect(statusOptionsFor(undefined)).not.toContain('Completed')
+    expect(statusOptionsFor(undefined).length).toBeGreaterThan(0)
   })
 })

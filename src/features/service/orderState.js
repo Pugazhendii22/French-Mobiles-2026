@@ -116,3 +116,34 @@ export const requireOrderDates = (receivedAt, expectedCompletionAt) => {
   if (!received || !expected) throw new Error(DATE_ERROR);
   return { received, expected };
 };
+
+/* ─────────────────────────────────────────────
+   WHICH STATUSES SOMEONE MAY MOVE AN ORDER TO
+
+   'Completed' is never one of them, from any role: finishing an order goes
+   through the pre-delivery checklist, never a dropdown.
+
+   This was `STATUSES.slice(indexOf(current))` - forward-only, by position in the
+   array. Two things were wrong with that. Position in STATUSES is the order the
+   statuses are listed in, not a workflow: 'Awaiting Customer Approval' sits
+   after 'Parts Awaiting', so an order whose customer had just approved the work
+   could only stay where it was or be returned, with no way to record "approved,
+   back on the bench". And it meant adding a status to STATUSES silently changed
+   what every member of staff was allowed to do.
+
+   So the rule is written down instead. 'Received' is the one you cannot go back
+   to: an order past it has been looked at, and saying otherwise would hide work
+   that has already happened.
+────────────────────────────────────────────── */
+export const statusOptionsFor = (current, { isAdmin = false } = {}) => {
+  const open = STATUSES.filter(s => s !== 'Completed');
+  const allowed = isAdmin ? open : open.filter(s => s === current || s !== 'Received');
+
+  /* An order carrying a status this build does not know - an older spelling, or
+     one since renamed - still has to show what it actually says. Leaving it out
+     left the select displaying some other order's status, and writing that one
+     on the next change. Completed is excluded even here: it has its own path. */
+  return current && current !== 'Completed' && !allowed.includes(current)
+    ? [current, ...allowed]
+    : allowed;
+};
