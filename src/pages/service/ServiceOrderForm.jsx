@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Section, FieldError } from '@/shared/ui/ui';
 import { inputClass, labelClass, errorInput } from '@/shared/ui/uiTokens';
-import { collection, getDocs, addDoc, query, where, setDoc, updateDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, query, where, setDoc, updateDoc, doc } from 'firebase/firestore';
 import { db } from '@/shared/firebase/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
@@ -10,6 +10,7 @@ import ImeiInput from '@/shared/components/ImeiInput';
 import ComboBox from '@/shared/ui/ComboBox';
 import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 import { readDraft, writeDraft, clearDraft } from '@/shared/lib/formDraft';
+import { toDateTimeLocal, nowDateTimeLocal } from '@/shared/lib/datetime';
 import { requireOrderDates } from '@/features/service/orderState';
 import { getLabelNumber } from '@/features/labels/data';
 import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
@@ -74,22 +75,15 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     : null;
 
 
-  const formatDateTimeLocal = (value) => {
-    if (!value) return '';
-    const date = value?.toDate ? value.toDate() : new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-    return date.toISOString().slice(0, 16);
-  };
-
   const buildFreshForm = () => {
-    const nowLocal = new Date().toISOString().slice(0, 16);
+    const nowLocal = nowDateTimeLocal();
     const base = initialData ? {
       ...initialData,
       alternatePhone: initialData.alternatePhone || '',
       technicianName: initialData.technicianName || userName || currentUser?.displayName || currentUser?.email || '',
       technicianUid: initialData.technicianUid || currentUser?.uid || '',
-      receivedAt: formatDateTimeLocal(initialData.receivedAt) || nowLocal,
-      expectedCompletionAt: formatDateTimeLocal(initialData.expectedCompletionAt) || ''
+      receivedAt: toDateTimeLocal(initialData.receivedAt) || nowLocal,
+      expectedCompletionAt: toDateTimeLocal(initialData.expectedCompletionAt) || ''
     } : {
       customerId: '',
       customerName: '',
@@ -242,6 +236,19 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
   }
   const [uploading, setUploading] = useState(false);
 
+  /* The options for the technician dropdown, and nothing else.
+
+     This used to write a default technician into formData too, which cost two
+     bugs. The name came from the users document rather than from AuthContext,
+     so for an admin whose two names differ an untouched form stopped matching
+     its pristine snapshot and stored a draft nobody had typed - the "unsaved
+     work" prompt, back again. And the fallback was `|| list[0]`, so an admin
+     who is not on the active-staff list had the first member of staff in the
+     shop silently recorded as the person who took the device in.
+
+     No default is needed here: buildFreshForm already puts the signed-in user
+     in technicianUid, the dropdown selects on that uid, and buildFinalData
+     resolves the name from this list when the order is saved. */
   useEffect(() => {
     if (userRole?.toLowerCase() !== 'admin') return;
 
@@ -252,17 +259,6 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
         const list = [];
         snap.forEach(doc => list.push({ uid: doc.id, ...doc.data() }));
         setStaffOptions(list);
-
-        if (!initialData) {
-          const defaultTech = list.find(u => u.uid === currentUser?.uid) || list[0];
-          if (defaultTech) {
-            setFormData(prev => ({
-              ...prev,
-              technicianUid: defaultTech.uid,
-              technicianName: defaultTech.name || defaultTech.email || ''
-            }));
-          }
-        }
       } catch (err) {
         console.error('Error fetching active staff:', err);
         setStaffOptions([]);
@@ -270,10 +266,14 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     };
 
     fetchStaff();
-  }, [userRole, currentUser, initialData]);
-  const [labelAssigned, setLabelAssigned] = useState(false);
-  const [assignedLabelNumber, setAssignedLabelNumber] = useState(null);
-  const [assigning, setAssigning] = useState(false);
+    /* Keyed on the uid, not the user object: the context hands out a fresh
+       object each render, which re-ran this and re-read the staff list. */
+  }, [userRole, currentUser?.uid]);
+  /* Seeded from the order rather than left empty until something happens in
+     this session. The registry lookup below confirms it, but that is a round
+     trip - and anyone who opened a labelled order and printed its job card
+     before it came back got a blank where the label number goes. */
+  const [assignedLabelNumber, setAssignedLabelNumber] = useState(initialData?.assignedLabelNumber ?? null);
   const [localId, setLocalId] = useState(initialData?.id || null);
   const [saveStatus, setSaveStatus] = useState('idle');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -287,10 +287,7 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
         try {
           const q = query(collection(db, 'label_registry'), where('referenceId', '==', localId), where('labelType', '==', 'service_order'));
           const snap = await getDocs(q);
-          if (!snap.empty) {
-            setLabelAssigned(true);
-            setAssignedLabelNumber(snap.docs[0].data().labelNumber);
-          }
+          if (!snap.empty) setAssignedLabelNumber(snap.docs[0].data().labelNumber);
         } catch (err) {
           console.error("Error fetching label:", err);
         }
@@ -501,8 +498,12 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       const settled = noteSaved(finalData, orderNumber);
       finalData.orderNumber = settled.orderNumber || finalData.orderNumber || '';
 
-      // Step 3: Auto assign next label number
-      const nextLabel = await getLabelNumber();
+      /* Step 3: the label number. Reuse one this order already has rather than
+         drawing another. The catch below resets saveStatus to 'idle' whatever
+         went wrong, so a failure after the registry entry was written re-enabled
+         the button - and a second press burned a second label number on one
+         device, leaving two active registry rows pointing at it. */
+      const nextLabel = assignedLabelNumber ?? await getLabelNumber();
       const labelData = {
         labelNumber: nextLabel,
         labelType: "service_order",
@@ -527,6 +528,9 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       };
 
       await setDoc(doc(db, "label_registry", nextLabel.toString()), labelData);
+      /* Recorded the moment it exists, so the guard above sees it even if one of
+         the steps after this one fails. */
+      setAssignedLabelNumber(nextLabel);
 
       await updateDoc(doc(db, "service_orders", savedDocId || localId), {
         assignedLabelNumber: nextLabel,
@@ -540,8 +544,6 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       setShowPrinterSelector(true);
 
       setSaveStatus(`Saved & Label #${nextLabel} Assigned ✓`);
-      setLabelAssigned(true);
-      setAssignedLabelNumber(nextLabel);
 
     } catch (error) {
       console.error("Save & Print error:", error);
@@ -552,51 +554,6 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     }
   };
 
-  const handleAssignLabel = async () => {
-    if (!localId) return;
-    setAssigning(true);
-    try {
-      const nextNum = await getLabelNumber();
-      if (window.confirm(`Assign label #${nextNum} to this service order?`)) {
-        await addDoc(collection(db, 'label_registry'), {
-          labelNumber: Number(nextNum),
-          labelType: 'service_order',
-          referenceId: localId,
-          assignedBy: currentUser?.uid || '',
-          assignedAt: new Date().toISOString(),
-          isActive: true,
-          data: {
-            orderNumber: formData.orderNumber || initialData?.orderNumber || '',
-            brand: formData.brand || '',
-            model: formData.model || '',
-            colour: formData.colour || '',
-            customerName: formData.customerName || '',
-            customerPhone: formData.customerPhone || '',
-            complaintTypes: formData.complaintTypes || [],
-            otherComplaint: formData.otherComplaint || '',
-            problemDetails: formData.problemDetails || '',
-            estimatedPrice: Number(formData.estimatedPrice || 0),
-            advancePaid: Number(formData.advancePaid || 0),
-            technicianName: formData.technicianName || userName || currentUser?.displayName || currentUser?.email || '',
-            status: formData.status || 'Received',
-            accessoriesCollected: formData.accessories || [],
-            lockType: formData.lockType || 'None',
-            lockPattern: formData.lockPattern || [],
-            lockHint: formData.lockHint || ''
-          }
-        });
-        setLabelAssigned(true);
-        setAssignedLabelNumber(nextNum);
-      }
-    } catch (err) {
-      alert("Error assigning label: " + err.message);
-    } finally {
-      setAssigning(false);
-    }
-  };
-
-  /* Saved, by either path. Both spellings are in use because Save & Print
-     reports its label number through the same field. */
   /* Saved AND untouched since. The old test was on saveStatus alone, which
      stayed 'saved' while someone carried on typing - so the button sat there
      reading "Saved ✓" over a form full of changes that were not saved at all,
@@ -616,8 +573,20 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
        should cost neither a save nor a bumped updatedAt. What comes back is the
        form including the order number the save just minted - reading formData
        here instead would print the version from before it arrived. */
+    /* Opened before the save, not after it. window.open only counts as
+       user-initiated while the tap that caused it is still being handled; an
+       await in between hands control back to the browser, and a phone then
+       treats the call as an unsolicited pop-up and blocks it. The old order
+       also left printWindow unchecked, so a blocked pop-up threw inside an
+       async click handler - no paper, and nothing on screen to say why. */
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setError('The browser blocked the print window. Allow pop-ups for this site, then print again.');
+      return;
+    }
+
     const saved = dirty ? await handleSubmit() : null;
-    if (dirty && !saved) return;
+    if (dirty && !saved) { printWindow.close(); return; }
     const source = saved || formData;
 
     const orderData = {
@@ -640,34 +609,16 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       advancePaid: source.advancePaid,
       assignedLabelNumber: assignedLabelNumber
     }
-    const html = generateServiceJobCard(orderData, shopDetails)
-    const printWindow = window.open('', '_blank')
-    printWindow.document.write(html)
-    printWindow.document.close()
-    setTimeout(() => {
-      printWindow.print()
-    }, 500)
-  }
-
-  const handlePrintLabel = () => {
-    const labelData = {
-      labelType: 'service_order',
-      labelNumber: labelAssigned ? assignedLabelNumber : null,
-      data: {
-        customerName: formData.customerName || '',
-        brand: formData.brand || '',
-        model: formData.model || '',
-        complaintTypes: formData.complaintTypes || [],
-        estimatedPrice: Number(formData.estimatedPrice || 0),
-        orderNumber: formData.orderNumber || initialData?.orderNumber || '',
-        imei1: formData.imei1 || '',
-      }
+    try {
+      printWindow.document.write(generateServiceJobCard(orderData, shopDetails))
+      printWindow.document.close()
+      setTimeout(() => printWindow.print(), 500)
+    } catch (err) {
+      console.error('Job card print failed:', err)
+      printWindow.close()
+      setError('Could not print the job card: ' + (err?.message || err))
     }
-    const html = generateLabelHTML(labelData)
-    setLabelHTMLContent(html)
-    setLabelEntry(labelData)
-    setShowPrinterSelector(true)
-  };
+  }
 
   if (!currentUser) {
     return (
