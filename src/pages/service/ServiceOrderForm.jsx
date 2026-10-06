@@ -686,7 +686,6 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
   const advance = Number(formData.advancePaid) || 0;
   const previewProfit = estPrice - materialCost - labourCost;
 
-  try {
     return (
       <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center animate-fade-in">
         <div
@@ -1114,8 +1113,8 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
                 )}
                 {formData.lockType === 'Pattern' && (
                   <div>
-                    <label className={labelClass}>Draw pattern</label>
-                    <div className="bg-gray-50 p-4 rounded-xl border border-[#e2e8f0] flex justify-center">
+                    <label className={labelClass}>Unlock pattern</label>
+                    <div className="flex justify-center">
                       <Suspense fallback={<div className="text-sm text-gray-400">Loading pattern lock...</div>}>
                         <PatternLock
                           value={formData?.lockPattern || []}
@@ -1207,16 +1206,6 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
 
       </div>
     );
-  } catch (err) {
-    console.error("Error rendering ServiceOrderForm:", err);
-    return (
-      <div className="p-4 md:p-8 text-center text-red-600 bg-red-50 rounded-lg break-words">
-        <h3 className="font-bold mb-2">Something went wrong.</h3>
-        <p>Please refresh the page or contact support if the issue persists.</p>
-        <p className="text-xs mt-2 text-red-400">{err.message}</p>
-      </div>
-    );
-  }
 };
 
 export default ServiceOrderForm;

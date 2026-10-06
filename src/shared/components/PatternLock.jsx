@@ -1,241 +1,116 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
+import { DOT_IDS, nextPattern, isValidPattern } from './patternSequence';
 
-const DOTS = Array.from({ length: 9 }, (_, index) => ({
-  id: index + 1,
-  cx: 25 + (index % 3) * 75,
-  cy: 25 + Math.floor(index / 3) * 75,
+/* ─────────────────────────────────────────────
+   UNLOCK PATTERN
+
+   Tapped, not drawn. This used to be a drag: press on a dot, pull across the
+   others, release - the gesture a phone's own lock screen uses. It is the wrong
+   gesture here. The field sits two thirds of the way down a bottom sheet, where
+   a drag is already how you scroll the form and how you pull the sheet shut, so
+   drawing a pattern fought both: the block had touch-action none, which stopped
+   the form scrolling whenever a thumb landed on it, and a downward stroke could
+   close the sheet instead of drawing a line.
+
+   Tapping has none of that. Each dot is its own button, so the browser decides
+   what is a tap and what is a scroll, the sequence is visible as numbers, and
+   there is a way back from a wrong dot that is not "clear it and start again":
+   tap a dot again to drop it, or tap an earlier one to rewind to it.
+
+   It also means this works from a keyboard and reads correctly aloud, which the
+   SVG and its pointer maths never did.
+────────────────────────────────────────────── */
+
+const DOT_GEOMETRY = DOT_IDS.map((id, index) => ({
+  id,
+  cx: 50 + (index % 3) * 100,
+  cy: 50 + Math.floor(index / 3) * 100,
 }));
 
+const FIRST = '#16a34a';
+const MIDDLE = '#002395';
+const LAST = '#ED2939';
+
+const colourOf = (position, total) => {
+  if (position === 0) return FIRST;
+  return position === total - 1 && total > 1 ? LAST : MIDDLE;
+};
+
 const PatternLock = ({ value = [], onChange, readOnly = false }) => {
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [currentPos, setCurrentPos] = useState({ x: 0, y: 0 });
-  const pattern = useMemo(() => Array.isArray(value) ? value : [], [value]);
-  const patternRef = useRef(pattern);
-  const pointerIdRef = useRef(null);
-  const svgRef = useRef(null);
+  /* Whatever Firestore or an older build put here, this component only ever
+     works with a real pattern. */
+  const pattern = useMemo(() => (isValidPattern(value) ? value : []), [value]);
 
-  useEffect(() => {
-    patternRef.current = pattern;
-  }, [pattern]);
-
-  useEffect(() => {
-    return () => {
-      if (pointerIdRef.current) {
-        document.releasePointerCapture?.(pointerIdRef.current);
-      }
-    };
-  }, []);
-
-  const getSVGCoords = (clientX, clientY) => {
-    const svg = svgRef.current;
-    if (!svg) return { x: 0, y: 0 };
-    
-    const rect = svg.getBoundingClientRect();
-    const scaleX = 200 / rect.width;
-    const scaleY = 200 / rect.height;
-    
-    return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY
-    };
-  };
-
-  const getNearestDot = (x, y) => {
-    let nearest = null;
-    let minDist = 35; // Activation radius
-    
-    DOTS.forEach(({ id, cx, cy }) => {
-      const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
-      if (dist < minDist && !patternRef.current.includes(id)) {
-        minDist = dist;
-        nearest = id;
-      }
-    });
-    
-    return nearest;
-  };
-
-  const addDotToPattern = (dotId) => {
-    if (!dotId || patternRef.current.includes(dotId)) return;
-    
-    const newPattern = [...patternRef.current, dotId];
-    patternRef.current = newPattern;
-    onChange?.(newPattern);
-  };
-
-  const handlePointerStart = (event) => {
+  const tap = (id) => {
     if (readOnly) return;
-    
-    event.preventDefault();
-    const coords = getSVGCoords(event.clientX, event.clientY);
-    
-    pointerIdRef.current = event.pointerId;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    
-    setIsDrawing(true);
-    setCurrentPos(coords);
-    
-    // Check if starting on a dot
-    const startDot = getNearestDot(coords.x, coords.y);
-    if (startDot) {
-      addDotToPattern(startDot);
-    }
+    onChange?.(nextPattern(pattern, id));
   };
 
-  const handlePointerMove = (event) => {
-    if (readOnly || !isDrawing || event.pointerId !== pointerIdRef.current) return;
-    
-    event.preventDefault();
-    const coords = getSVGCoords(event.clientX, event.clientY);
-    
-    setCurrentPos(coords);
-    
-    // Check for dots along the path
-    const nearestDot = getNearestDot(coords.x, coords.y);
-    if (nearestDot) {
-      addDotToPattern(nearestDot);
-    }
-  };
+  const positionOf = (id) => pattern.indexOf(id);
+  const points = pattern.map(id => DOT_GEOMETRY[id - 1]).filter(Boolean);
 
-  const handlePointerEnd = (event) => {
-    if (readOnly || event.pointerId !== pointerIdRef.current) return;
-    
-    setIsDrawing(false);
-    setCurrentPos({ x: 0, y: 0 });
-    pointerIdRef.current = null;
-  };
-
-  const clearPattern = () => {
-    if (readOnly) return;
-    onChange?.([]);
-  };
-
-  const points = pattern.map(id => DOTS[id - 1]).filter(Boolean);
-  
   return (
-    <div className="w-full" style={{ touchAction: 'none', userSelect: 'none' }}>
-      <p className="text-sm text-gray-500 text-center mb-3">
-        {pattern.length === 0 
-          ? 'Draw the unlock pattern' 
-          : `Pattern recorded (${pattern.length} points)`}
+    <div className="w-full select-none">
+      <p className="text-[13px] text-[#64748b] text-center mb-3">
+        {pattern.length === 0
+          ? 'Tap the dots in the order the customer draws them'
+          : `${pattern.length} ${pattern.length === 1 ? 'dot' : 'dots'} · tap a dot again to change it`}
       </p>
-      
-      <div
-        className="bg-[#f0f4ff] rounded-2xl p-6 flex flex-col items-center justify-center relative"
-        onPointerDown={handlePointerStart}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerEnd}
-        onPointerCancel={handlePointerEnd}
-        onPointerLeave={handlePointerEnd}
-      >
-        <div style={{ width: '240px', height: '240px', position: 'relative' }}>
-          <svg 
-            ref={svgRef}
-            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
-            viewBox="0 0 200 200" 
-            preserveAspectRatio="xMidYMid meet"
+
+      <div className="bg-[#f0f4ff] rounded-2xl p-4 flex justify-center">
+        <div className="relative" style={{ width: 288, height: 288 }}>
+          {/* The lines are decoration over the buttons, never a tap target. */}
+          <svg
+            viewBox="0 0 300 300"
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full pointer-events-none"
           >
             <defs>
-              <marker
-                id="arrow"
-                viewBox="0 0 10 10"
-                refX="18"
-                refY="5"
-                markerWidth="6"
-                markerHeight="6"
-                orient="auto-start-reverse"
-              >
-                <path d="M 0 1.5 L 7 5 L 0 8.5 z" fill="#002395" />
+              <marker id="pattern-arrow" viewBox="0 0 10 10" refX="16" refY="5"
+                markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                <path d="M 0 1.5 L 7 5 L 0 8.5 z" fill={MIDDLE} />
               </marker>
             </defs>
-
-            {/* Connecting segments */}
-            {points.slice(0, -1).map((p, i) => {
-              const next = points[i + 1];
-              return (
-                <line
-                  key={i}
-                  x1={p.cx}
-                  y1={p.cy}
-                  x2={next.cx}
-                  y2={next.cy}
-                  stroke="#002395"
-                  strokeWidth="3"
-                  opacity="0.8"
-                  markerEnd="url(#arrow)"
-                />
-              );
-            })}
-
-            {/* Dynamic line while drawing */}
-            {isDrawing && points.length > 0 && (
+            {points.slice(0, -1).map((p, i) => (
               <line
-                x1={points[points.length - 1].cx}
-                y1={points[points.length - 1].cy}
-                x2={currentPos.x}
-                y2={currentPos.y}
-                stroke="#002395"
-                strokeWidth="3"
-                opacity="0.6"
+                key={p.id}
+                x1={p.cx} y1={p.cy}
+                x2={points[i + 1].cx} y2={points[i + 1].cy}
+                stroke={MIDDLE} strokeWidth="4" opacity="0.75"
+                markerEnd="url(#pattern-arrow)"
               />
-            )}
-            
-            {/* Current position indicator */}
-            {isDrawing && (
-              <circle 
-                cx={currentPos.x} 
-                cy={currentPos.y} 
-                r="8" 
-                fill="#002395" 
-                opacity="0.4"
-              />
-            )}
+            ))}
           </svg>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', width: '100%', height: '100%' }}>
-            {DOTS.map(({ id }) => {
-              const isSelected = pattern.includes(id);
-              const isFirst = pattern[0] === id;
-              const isLast = pattern.length > 1 && pattern[pattern.length - 1] === id;
-              
-              let bg = 'white';
-              let border = '2px solid #D1D5DB';
-              let textColor = '#6B7280';
-              
-              if (isSelected) {
-                if (isFirst) {
-                  bg = '#22C55E';
-                  border = '2px solid #22C55E';
-                } else if (isLast) {
-                  bg = '#ED2939';
-                  border = '2px solid #ED2939';
-                } else {
-                  bg = '#002395';
-                  border = '2px solid #002395';
-                }
-                textColor = 'white';
-              }
-              
+          <div className="grid grid-cols-3 w-full h-full">
+            {DOT_IDS.map(id => {
+              const position = positionOf(id);
+              const on = position !== -1;
+              const colour = on ? colourOf(position, pattern.length) : null;
+
               return (
-                <div
-                  key={id}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  <div
-                    className="flex items-center justify-center transition-all duration-200 shadow-sm"
+                <div key={id} className="flex items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={() => tap(id)}
+                    disabled={readOnly}
+                    /* 64px of target inside a 96px cell: a thumb cannot reach
+                       two of them at once, which is what went wrong on the
+                       pre-delivery checklist next door. */
                     style={{
-                      width: '48px',
-                      height: '48px',
-                      borderRadius: '50%',
-                      backgroundColor: bg,
-                      border: border,
-                      color: textColor,
-                      fontSize: '16px',
-                      fontWeight: 'bold',
+                      width: 64, height: 64, borderRadius: '50%',
+                      backgroundColor: on ? colour : '#ffffff',
+                      border: `2px solid ${on ? colour : '#D1D5DB'}`,
+                      color: on ? '#ffffff' : '#94a3b8',
                     }}
+                    className="relative flex items-center justify-center text-[17px] font-bold shadow-sm transition-colors disabled:cursor-default"
+                    aria-pressed={on}
+                    aria-label={on
+                      ? `Dot ${id}, number ${position + 1} in the pattern. Tap to change.`
+                      : `Dot ${id}, not used. Tap to add.`}
                   >
-                    {id}
-                  </div>
+                    {on ? position + 1 : ''}
+                  </button>
                 </div>
               );
             })}
@@ -243,49 +118,32 @@ const PatternLock = ({ value = [], onChange, readOnly = false }) => {
         </div>
       </div>
 
+      {/* The sequence in words, because a line drawing is hard to read back to
+          a customer over the phone. */}
       {pattern.length > 0 && (
-        <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',justifyContent:'center',gap:'4px',marginTop:'8px'}}>
-          {pattern.map((dot, index) => {
-            const isFirst = index === 0;
-            const isLast = pattern.length > 1 && index === pattern.length - 1;
-            const dotBg = isFirst ? '#22C55E' : isLast ? '#ED2939' : '#002395';
-            
-            return (
-              <span key={dot} style={{display:'inline-flex',alignItems:'center',gap:'4px'}}>
-                <span style={{
-                  width: '24px', height: '24px',
-                  borderRadius: '50%',
-                  background: dotBg,
-                  color: 'white',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '12px',
-                  fontWeight: 'bold'
-                }}>{dot}</span>
-                {index < pattern.length - 1 && (
-                  <span style={{color:'#002395',fontWeight:'bold'}}>→</span>
-                )}
-              </span>
-            );
-          })}
-        </div>
-      )}
-
-      {readOnly && pattern.length > 0 && (
-        <p style={{fontSize:'10px',color:'#666',textAlign:'center',marginTop:'4px'}}>
-          Start: {pattern[0]} → End: {pattern[pattern.length-1]} ({pattern.length} points)
+        <p className="text-center text-[13px] font-bold text-[#0f172a] mt-2.5 tabular-nums break-words">
+          {pattern.join(' → ')}
         </p>
       )}
-      
-      {pattern.length > 0 && !readOnly && (
-        <button
-          type="button"
-          onClick={clearPattern}
-          className="mt-3 w-full bg-red-50 text-[#ED2939] rounded-xl py-2 text-sm font-semibold border border-red-100"
-        >
-          <i className="fas fa-redo mr-2"></i>Clear Pattern
-        </button>
+
+      {!readOnly && pattern.length > 0 && (
+        <div className="flex items-center justify-center gap-4 mt-2">
+          <button
+            type="button"
+            onClick={() => onChange?.(pattern.slice(0, -1))}
+            className="text-[13px] font-semibold text-[#002395] py-1.5"
+          >
+            Undo last dot
+          </button>
+          <span aria-hidden="true" className="text-[#cbd5e1]">·</span>
+          <button
+            type="button"
+            onClick={() => onChange?.([])}
+            className="text-[13px] font-semibold text-[#64748b] py-1.5"
+          >
+            Clear
+          </button>
+        </div>
       )}
     </div>
   );

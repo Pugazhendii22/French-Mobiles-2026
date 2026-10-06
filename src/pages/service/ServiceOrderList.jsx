@@ -16,6 +16,7 @@ import { describeFirebaseError } from '@/shared/firebase/firebaseError';
 import { openWhatsApp as openWhatsAppChat, isWhatsAppReady } from '@/shared/lib/phone';
 import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 import { matchesQuery } from '@/shared/lib/searchMatch';
+import { checklistEntries, blankChecklist, carryOver, allChecked } from '@/features/service/checklist';
 import {
   STATUSES, isOverdue, isDueToday, isClosed, stateMetaOf, matchesTab, TABS, normalizeDate,
 } from '@/features/service/orderState';
@@ -55,25 +56,14 @@ const ServiceOrderList = () => {
   const { preDeliveryChecklist = [] } = useSettings();
   const [completeModalOpen, setCompleteModalOpen] = useState(false);
   const [selectedOrderForComplete, setSelectedOrderForComplete] = useState(null);
-  const normalizeChecklistKey = (label) => label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-  const createChecklist = (items = []) => {
-    return items.reduce((acc, item) => {
-      acc[normalizeChecklistKey(item)] = false
-      return acc
-    }, {})
-  }
-  const [completeChecklist, setCompleteChecklist] = useState(() => createChecklist(preDeliveryChecklist));
+  const [completeChecklist, setCompleteChecklist] = useState(() => blankChecklist(preDeliveryChecklist));
   const [completeError, setCompleteError] = useState('');
 
+  /* The list is editable in settings, so it can change while this sheet is
+     open. Whatever was already ticked stays ticked. */
   useEffect(() => {
-    setCompleteChecklist(prev => {
-      const nextChecklist = {}
-      preDeliveryChecklist.forEach(item => {
-        const key = normalizeChecklistKey(item)
-        nextChecklist[key] = prev[key] || false
-      })
-      return nextChecklist
-    })
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCompleteChecklist(prev => carryOver(preDeliveryChecklist, prev));
   }, [preDeliveryChecklist])
 
   const [billModalOpen, setBillModalOpen] = useState(false);
@@ -178,7 +168,7 @@ const ServiceOrderList = () => {
 
   const openCompleteModal = (order) => {
     setSelectedOrderForComplete(order);
-    setCompleteChecklist(createChecklist(preDeliveryChecklist));
+    setCompleteChecklist(blankChecklist(preDeliveryChecklist));
     setCompleteError('');
     setCompleteModalOpen(true);
   };
@@ -188,8 +178,7 @@ const ServiceOrderList = () => {
   };
 
   const handleConfirmComplete = async () => {
-    const allChecked = Object.values(completeChecklist).every(val => val === true);
-    if (!allChecked) {
+    if (!allChecked(preDeliveryChecklist, completeChecklist)) {
       setCompleteError('Please complete all checklist items before marking as complete');
       return;
     }
@@ -709,14 +698,21 @@ const ServiceOrderList = () => {
                   </div>
                 )}
 
-                <div className="bg-white rounded-2xl p-2 shadow-sm">
-                  {preDeliveryChecklist.map(item => {
-                    const key = normalizeChecklistKey(item)
+                <div className="bg-white rounded-2xl p-2 shadow-sm space-y-2">
+                  {/* A row is 60px tall with a gap between rows, because these
+                      were 48px targets touching each other: a thumb aimed at one
+                      landed on its neighbour and unticked it, and the only way
+                      through the list was to tap very carefully. */}
+                  {checklistEntries(preDeliveryChecklist).map(({ item, key }) => {
                     const checked = !!completeChecklist[key]
                     return (
                       <label
                         key={key}
-                        className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition ${checked ? 'bg-green-50' : ''}`}
+                        className={`flex items-center gap-3 px-3 min-h-[60px] rounded-xl cursor-pointer transition border ${
+                          checked
+                            ? 'bg-green-50 border-green-200'
+                            : 'bg-white border-[#e2e8f0]'
+                        }`}
                       >
                         <input
                           type="checkbox"
@@ -727,7 +723,7 @@ const ServiceOrderList = () => {
                         <span className={`text-sm font-medium flex-1 ${checked ? 'text-[#0f172a]' : 'text-gray-600'}`}>
                           {item}
                         </span>
-                        {checked && <i className="fas fa-check-circle text-green-500"></i>}
+                        {checked && <i className="fas fa-check-circle text-green-500" aria-hidden="true"></i>}
                       </label>
                     )
                   })}

@@ -23,6 +23,7 @@ import { openWhatsApp as openWhatsAppChat } from '@/shared/lib/phone';
 import { serviceOrderLabelData, syncLabelSnapshot, withLiveLabelData } from '@/features/labels/data';
 import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 import { STATUSES, stateMetaOf } from '@/features/service/orderState';
+import { checklistEntries, blankChecklist, allChecked } from '@/features/service/checklist';
 
 /* Everything but Completed: finishing an order goes through the pre-delivery
    checklist, never a dropdown. Derived from the one shared list rather than
@@ -75,13 +76,6 @@ const ServiceOrderView = () => {
   const [viewerTitle, setViewerTitle] = useState('');
 
   const [showCompleteModal, setShowCompleteModal] = useState(false);
-  const normalizeChecklistKey = (label) => label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-  const createChecklist = (items = []) => {
-    return items.reduce((acc, item) => {
-      acc[normalizeChecklistKey(item)] = false
-      return acc
-    }, {})
-  }
   const [completeChecklist, setCompleteChecklist] = useState({});
   const [completeError, setCompleteError] = useState('');
 
@@ -91,20 +85,25 @@ const ServiceOrderView = () => {
   const [ratingDataForModal, setRatingDataForModal] = useState(null);
   const [ratingGenerating, setRatingGenerating] = useState(false);
 
+  /* Blanked when the sheet opens, and only then. The settings list was in the
+     dependencies, and the context hands out a fresh array whenever no checklist
+     is configured - so this could fire mid-tick and wipe what had been ticked.
+     An item added to settings while the sheet is open simply renders unticked,
+     which is what it should be. */
   useEffect(() => {
-    if (showCompleteModal) {
-      setCompleteChecklist(createChecklist(preDeliveryChecklist));
-      setCompleteError('');
-    }
-  }, [showCompleteModal, preDeliveryChecklist]);
+    if (!showCompleteModal) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCompleteChecklist(blankChecklist(preDeliveryChecklist));
+    setCompleteError('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCompleteModal]);
 
   const handleCompleteToggle = (key) => {
     setCompleteChecklist(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   const handleConfirmComplete = async () => {
-    const allChecked = Object.values(completeChecklist).every(val => val === true);
-    if (!allChecked) {
+    if (!allChecked(preDeliveryChecklist, completeChecklist)) {
       setCompleteError('Please complete all checklist items before marking as complete');
       return;
     }
@@ -584,7 +583,6 @@ const ServiceOrderView = () => {
   const canComplete = (isAdmin || order?.technicianUid === currentUser?.uid) && !isCompleted;
   const canEditOrder = isAdmin || (order?.technicianUid === currentUser?.uid && !isCompletedBill);
 
-  try {
     return (
       <Layout title="Service Order" pageType="detail" backTo="/service">
         <div className="max-w-3xl mx-auto space-y-3">
@@ -1153,13 +1151,19 @@ const ServiceOrderView = () => {
                     </div>
                   )}
                   <div className="bg-white rounded-2xl p-2 shadow-sm">
-                    {preDeliveryChecklist.map(item => {
-                      const key = normalizeChecklistKey(item)
+                    {/* A row is 60px tall with a gap between rows. These were
+                        48px targets touching each other, so a thumb aimed at one
+                        landed on its neighbour and unticked it. */}
+                    {checklistEntries(preDeliveryChecklist).map(({ item, key }) => {
                       const checked = !!completeChecklist[key]
                       return (
                         <label
                           key={key}
-                          className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition ${checked ? 'bg-green-50' : ''}`}
+                          className={`flex items-center gap-3 px-3 min-h-[60px] rounded-xl cursor-pointer transition border ${
+                            checked
+                              ? 'bg-green-50 border-green-200'
+                              : 'bg-white border-[#e2e8f0]'
+                          }`}
                         >
                           <input
                             type="checkbox"
@@ -1170,7 +1174,7 @@ const ServiceOrderView = () => {
                           <span className={`text-sm font-medium flex-1 ${checked ? 'text-[#0f172a]' : 'text-gray-600'}`}>
                             {item}
                           </span>
-                          {checked && <i className="fas fa-check-circle text-green-500"></i>}
+                          {checked && <i className="fas fa-check-circle text-green-500" aria-hidden="true"></i>}
                         </label>
                       )
                     })}
@@ -1261,19 +1265,6 @@ const ServiceOrderView = () => {
         </div>
       </Layout>
     );
-  } catch (err) {
-    console.error("Error rendering ServiceOrderView:", err);
-    return (
-      <Layout title="Error" pageType="detail" backTo="/service">
-        <div className="p-4 md:p-8 text-center text-red-600 bg-red-50 rounded-lg max-w-2xl mx-auto mt-10 break-words">
-          <h3 className="font-bold text-xl mb-2">Something went wrong</h3>
-          <p>The service order details could not be displayed due to an error.</p>
-          <p className="text-sm mt-4 text-red-500 font-mono bg-red-100 p-2 rounded text-left overflow-x-auto break-words">{err.toString()}</p>
-          <button onClick={() => window.location.reload()} className="mt-6 bg-red-600 text-white px-4 py-2 rounded break-words">Refresh Page</button>
-        </div>
-      </Layout>
-    );
-  }
 };
 
 export default ServiceOrderView;
