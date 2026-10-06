@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react'
+import { useRef, useState, useCallback, useEffect } from 'react'
 
 /* ─────────────────────────────────────────────
    SWIPE A SHEET AWAY
@@ -21,6 +21,11 @@ export const DISMISS_DISTANCE = 120
 export const FLICK_DISTANCE = 70
 export const FLICK_VELOCITY = 0.5
 
+/* How long the sheet takes to slide out once the gesture has decided. It
+   opened by sliding up, so vanishing on the spot reads as a glitch rather than
+   a dismissal - and leaves nothing to tell you which screen you landed on. */
+export const CLOSE_MS = 200
+
 /**
  * Whether a finished drag should close the sheet.
  * `distance` is positive downwards; an upward drag never closes.
@@ -38,6 +43,22 @@ export const useSheetDismiss = ({ onDismiss, enabled = true } = {}) => {
   const gesture = useRef(null)
   const [offset, setOffset] = useState(0)
   const [dragging, setDragging] = useState(false)
+  const [closing, setClosing] = useState(false)
+  const closeTimer = useRef(null)
+
+  useEffect(() => () => clearTimeout(closeTimer.current), [])
+
+  /* Slide the sheet off the bottom, then hand over. Someone who has asked the
+     system for less motion gets the dismissal immediately. */
+  const close = useCallback(() => {
+    const reduced = typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+    if (reduced) { onDismiss?.(); return }
+
+    setClosing(true)
+    setOffset(typeof window !== 'undefined' ? window.innerHeight : 1000)
+    closeTimer.current = setTimeout(() => onDismiss?.(), CLOSE_MS)
+  }, [onDismiss])
 
   const start = useCallback((e, fromHandle) => {
     if (!enabled || !onDismiss) return
@@ -62,11 +83,11 @@ export const useSheetDismiss = ({ onDismiss, enabled = true } = {}) => {
     if (!g) return
     const distance = (e.changedTouches?.[0]?.clientY ?? g.y) - g.y
     if (shouldDismiss({ distance, elapsedMs: Date.now() - g.at })) {
-      onDismiss?.()
+      close()
       return
     }
     setOffset(0)
-  }, [onDismiss])
+  }, [onDismiss, close])
 
   const sheetProps = {
     onTouchStart: (e) => start(e, false),
@@ -75,7 +96,9 @@ export const useSheetDismiss = ({ onDismiss, enabled = true } = {}) => {
     onTouchCancel: end,
     style: {
       transform: offset ? `translateY(${offset}px)` : undefined,
-      transition: dragging ? 'none' : 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)',
+        transition: dragging
+        ? 'none'
+        : `transform ${closing ? CLOSE_MS : 220}ms cubic-bezier(0.22, 1, 0.36, 1)`,
     },
   }
 

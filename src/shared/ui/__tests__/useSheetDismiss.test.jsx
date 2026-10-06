@@ -1,9 +1,10 @@
 /** @vitest-environment jsdom */
-import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
-import { shouldDismiss, useSheetDismiss } from '@/shared/ui/useSheetDismiss'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
+import { shouldDismiss, useSheetDismiss, CLOSE_MS } from '@/shared/ui/useSheetDismiss'
 
-afterEach(cleanup)
+beforeEach(() => { vi.useFakeTimers() })
+afterEach(() => { vi.useRealTimers(); cleanup() })
 
 describe('shouldDismiss', () => {
   it('ignores a small nudge, so a half-filled form is not lost by accident', () => {
@@ -58,12 +59,15 @@ const Sheet = ({ onDismiss, scrollTop = 0 }) => {
 }
 
 /* Distance decides these cases; the velocity rule is covered by the
-   shouldDismiss tests above, where time can be stated exactly. */
+   shouldDismiss tests above, where time can be stated exactly.
+   The sheet slides out before it is dismissed, so the timers are run forward
+   to the end of that animation. */
 const drag = (el, { from = 0, to = 200 }) => {
   fireEvent.touchStart(el, { touches: [{ clientY: from }] })
   fireEvent.touchMove(el, { touches: [{ clientY: (from + to) / 2 }] })
   fireEvent.touchMove(el, { touches: [{ clientY: to }] })
   fireEvent.touchEnd(el, { changedTouches: [{ clientY: to }] })
+  act(() => { vi.advanceTimersByTime(CLOSE_MS + 50) })
 }
 
 describe('dragging the sheet', () => {
@@ -109,5 +113,37 @@ describe('dragging the sheet', () => {
     render(<Sheet onDismiss={onDismiss} scrollTop={420} />)
     drag(screen.getByTestId('handle'), { from: 10, to: 260 })
     expect(onDismiss).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('closing is animated, not instant', () => {
+  it('does not dismiss the moment the finger lifts', () => {
+    const onDismiss = vi.fn()
+    render(<Sheet onDismiss={onDismiss} />)
+    const handle = screen.getByTestId('handle')
+    fireEvent.touchStart(handle, { touches: [{ clientY: 10 }] })
+    fireEvent.touchMove(handle, { touches: [{ clientY: 260 }] })
+    fireEvent.touchEnd(handle, { changedTouches: [{ clientY: 260 }] })
+
+    expect(onDismiss).not.toHaveBeenCalled()
+
+    act(() => { vi.advanceTimersByTime(CLOSE_MS + 50) })
+    expect(onDismiss).toHaveBeenCalledTimes(1)
+  })
+
+  it('slides the sheet the rest of the way down while it closes', () => {
+    const onDismiss = vi.fn()
+    render(<Sheet onDismiss={onDismiss} />)
+    const handle = screen.getByTestId('handle')
+    const sheet = screen.getByTestId('sheet')
+    fireEvent.touchStart(handle, { touches: [{ clientY: 10 }] })
+    fireEvent.touchMove(handle, { touches: [{ clientY: 260 }] })
+    fireEvent.touchEnd(handle, { changedTouches: [{ clientY: 260 }] })
+
+    // further down than the finger ever went
+    const y = Number((sheet.style.transform.match(/translateY\((\d+(?:\.\d+)?)px\)/) || [])[1])
+    expect(y).toBeGreaterThan(260)
+
+    act(() => { vi.advanceTimersByTime(CLOSE_MS + 50) })
   })
 })

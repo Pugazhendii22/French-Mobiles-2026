@@ -151,7 +151,11 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
   const startFresh = () => {
     clearDraft(draftKey);
     setRestoredDraft(false);
-    onCancel();
+    setFormData(buildFreshForm());
+    setSignatureData(initialData?.sellerSignatureUrl || '');
+    setFieldErrors({});
+    setError('');
+    scrollRef.current?.scrollTo({ top: 0 });
   };
 
   /* A scan-to-create flow (see ScannerPage) may hand us a recognised brand/model
@@ -202,7 +206,10 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
     return 'A'
   }
 
-  const [formData, setFormData] = useState(() => {
+  /* The form as it opens, with nothing typed. Named so that "Start empty" can
+     reset to exactly the same thing the form would have shown on a first open,
+     rather than closing and asking the person to come back in. */
+  const buildFreshForm = () => {
     const base = initialData || {};
     const checklist = base.conditionChecklist || {};
     const autoGrade = base.gradeAutoCalculated || 'A';
@@ -246,9 +253,14 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       agreementAcceptedAt: base.agreementAcceptedAt || ''
     };
 
+    return fresh;
+  };
+
+  const [formData, setFormData] = useState(() => {
     /* Anything typed before the form was closed wins, except over a device the
        scanner just handed us - that is a fresh intake, not the old draft. */
     const draft = prefillData ? null : readDraft(`second-hand:${initialData?.id || 'new'}`);
+    const fresh = buildFreshForm();
     return draft ? { ...fresh, ...draft } : fresh;
   });
 
