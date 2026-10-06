@@ -569,10 +569,6 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
      save is bookkeeping that should happen on the way there. */
   const handlePrintJobCard = async () => {
     if (!validateAndScroll()) return;
-    /* Only write if there is something to write: printing an unchanged order
-       should cost neither a save nor a bumped updatedAt. What comes back is the
-       form including the order number the save just minted - reading formData
-       here instead would print the version from before it arrived. */
     /* Opened before the save, not after it. window.open only counts as
        user-initiated while the tap that caused it is still being handled; an
        await in between hands control back to the browser, and a phone then
@@ -585,6 +581,10 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       return;
     }
 
+    /* Only write if there is something to write: printing an unchanged order
+       should cost neither a save nor a bumped updatedAt. What comes back is the
+       form including the order number the save just minted - reading formData
+       here instead would print the version from before it arrived. */
     const saved = dirty ? await handleSubmit() : null;
     if (dirty && !saved) { printWindow.close(); return; }
     const source = saved || formData;
