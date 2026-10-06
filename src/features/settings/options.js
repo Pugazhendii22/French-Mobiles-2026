@@ -9,7 +9,7 @@
    tested without a database.
 ────────────────────────────────────────────── */
 
-import { doc, updateDoc, arrayUnion } from 'firebase/firestore'
+import { doc, setDoc, arrayUnion } from 'firebase/firestore'
 import { db } from '@/shared/firebase/firebase'
 
 /** Trimmed, with runs of inner whitespace collapsed. Casing is left alone. */
@@ -61,9 +61,16 @@ export const planOptionWrites = (requested = {}, known = {}) => {
  * Append each planned value to its list.
  *
  * arrayUnion rather than a whole-document write: two staff adding a brand in
- * the same minute must both succeed, and a setDoc would let one silently
- * overwrite the other. It also creates a missing field, so a model under a
- * brand-new brand needs no special case.
+ * the same minute must both succeed, and writing the document out whole would
+ * let one silently overwrite the other. It also creates a missing field, so a
+ * model under a brand-new brand needs no special case.
+ *
+ * setDoc with merge rather than updateDoc, which rejects when the document does
+ * not exist yet. settings/field_options is newer than the shops running this, and
+ * it is only created when SettingsContext loads with a cold cache - so on a device
+ * that had a warm one, every new supplier, colour and category typed for the next
+ * day went into a write that threw, got swallowed by the catch below, and was
+ * lost without a word. Merging creates the document when it has to.
  *
  * Never throws. Filing a brand name must not be able to fail the sale the
  * person just made.
@@ -72,7 +79,7 @@ export const applyOptionWrites = async (writes = []) => {
   if (!writes.length) return true
   try {
     await Promise.all(writes.map(({ docKey, field, value }) =>
-      updateDoc(doc(db, 'settings', docKey), { [field]: arrayUnion(value) })
+      setDoc(doc(db, 'settings', docKey), { [field]: arrayUnion(value) }, { merge: true })
     ))
     return true
   } catch (err) {

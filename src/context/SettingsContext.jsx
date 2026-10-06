@@ -5,7 +5,11 @@ import { db } from '@/shared/firebase/firebase'
 
 const SettingsContext = createContext()
 
-const CACHE_KEY = 'fm_settings_cache_v3'
+/* Bumped with every change to the shape below, so a device holding the old
+   cache re-reads rather than running for a day on settings that are missing a
+   document or a key. v3 was not bumped when field_options was added, which is
+   how new suppliers and colours came to be silently dropped on a warm cache. */
+const CACHE_KEY = 'fm_settings_cache_v4'
 const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000 // 24 hours
 
 const DEFAULT_SETTINGS = {
@@ -100,6 +104,10 @@ const DEFAULT_SETTINGS = {
   },
   field_options: {
     supplier: [],
+    /* Technicians who are not shop staff - the repair shop down the road, or
+       whoever the work went out to. Staff with a login come from the users
+       collection and are never duplicated in here. */
+    technician: [],
     colour: ['Black', 'White', 'Blue', 'Red', 'Gold', 'Silver', 'Green'],
     product_category: [
       'Back Cover', 'Battery', 'Cable', 'Charger', 'Earphones',

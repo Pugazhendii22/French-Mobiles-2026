@@ -12,6 +12,7 @@ import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 import { readDraft, writeDraft, clearDraft } from '@/shared/lib/formDraft';
 import { toDateTimeLocal, nowDateTimeLocal } from '@/shared/lib/datetime';
 import { requireOrderDates } from '@/features/service/orderState';
+import { technicianFor, technicianOptions, technicianToRemember } from '@/features/service/technician';
 import { getLabelNumber } from '@/features/labels/data';
 import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
 import { generateLabelHTML } from '@/features/labels/printing/printLabel';
@@ -395,8 +396,13 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
 
     const role = userRole?.toLowerCase();
     if (role === 'admin') {
-      const selectedTech = staffOptions.find(u => u.uid === finalData.technicianUid);
-      finalData.technicianName = selectedTech?.name || finalData.technicianName || currentUser?.displayName || currentUser?.email || '';
+      /* The form's own value wins. It used to take the name of whoever
+         technicianUid pointed at, which would have thrown away a typed name the
+         moment it was saved - and the uid now holds the shop's owner for the
+         order rather than always the person doing the work. */
+      finalData.technicianName = finalData.technicianName
+        || staffOptions.find(u => u.uid === finalData.technicianUid)?.name
+        || currentUser?.displayName || currentUser?.email || '';
       finalData.technicianUid = finalData.technicianUid || currentUser?.uid || '';
     } else {
       // Staff, and anyone whose role has not loaded, own the orders they take in.
@@ -445,7 +451,13 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     rememberOptions({
       brands: finalData.brand,
       models: { [finalData.brand]: finalData.model },
-      field_options: { colour: finalData.colour },
+      field_options: {
+        colour: finalData.colour,
+        /* Only a name from outside the shop. Staff come from the users
+           collection, so filing them here would show them twice in the box and
+           leave a copy behind when they leave. */
+        technician: technicianToRemember(finalData.technicianName, staffOptions),
+      },
     });
     return settled;
   };
@@ -630,6 +642,15 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       </div>
     );
   }
+
+  /* The technician box reads names, not uids - it has to, because a name typed
+     into it may belong to nobody with a login. The rules live in
+     features/service/technician.js, because technicianUid decides who can see and
+     change the order and that is not something to work out inline. */
+  const technicianNames = technicianOptions(staffOptions, fieldOptions.technician);
+  const outsideTechnician = technicianFor({
+    typed: formData.technicianName, staffOptions,
+  }).isOutside;
 
   const estPrice = Number(formData.estimatedPrice) || 0;
   const materialCost = Number(formData.rawMaterialCost) || 0;
@@ -1021,25 +1042,37 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
                 <div>
                   <label className={labelClass}>Technician</label>
                   {userRole?.toLowerCase() === 'admin' ? (
-                    <select
-                      value={formData.technicianUid}
-                      onChange={e => {
-                        const selected = staffOptions.find(s => s.uid === e.target.value);
-                        setFormData(prev => ({
-                          ...prev,
-                          technicianUid: e.target.value,
-                          technicianName: selected?.name || selected?.email || prev.technicianName
-                        }));
-                      }}
-                      className={inputClass}
-                    >
-                      <option value="">Select Technician</option>
-                      {staffOptions.map(staff => (
-                        <option key={staff.uid} value={staff.uid}>{`${staff.name || staff.email}${staff.role ? ` (${staff.role})` : ''}`}</option>
-                      ))}
-                    </select>
+                    <>
+                      {/* Type or pick. A closed list could only name people with a
+                          login here, so work sent to a repair shop down the road -
+                          which this form already costs under Outside labour - had
+                          nowhere to be recorded, and neither did someone who has
+                          since left the shop and dropped off the active list. */}
+                      <ComboBox
+                        value={formData.technicianName}
+                        onChange={value => setFormData(prev => {
+                          const { technicianName, technicianUid } = technicianFor({
+                            typed: value,
+                            staffOptions,
+                            previousUid: prev.technicianUid,
+                            fallbackUid: currentUser?.uid,
+                          });
+                          return { ...prev, technicianName, technicianUid };
+                        })}
+                        options={technicianNames}
+                        placeholder="Pick someone, or type a name"
+                      />
+                      {outsideTechnician && (
+                        <p className="text-[11px] text-[#64748b] mt-1.5 leading-snug">
+                          Not shop staff, so this goes down as outside work. The order stays with{' '}
+                          {staffOptions.find(st => st.uid === formData.technicianUid)?.name
+                            || userName || currentUser?.displayName || currentUser?.email || 'you'}
+                          {' '}in the shop.
+                        </p>
+                      )}
+                    </>
                   ) : (
-                    <div className={`${inputClass} bg-gray-50 font-medium text-gray-600`}>
+                    <div className={`${inputClass} bg-gray-50 font-medium text-[#64748b]`}>
                       {formData.technicianName || userName || currentUser?.displayName || currentUser?.email || 'Current User'}
                     </div>
                   )}

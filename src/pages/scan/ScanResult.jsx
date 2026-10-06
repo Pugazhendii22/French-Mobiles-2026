@@ -4,6 +4,7 @@ import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firesto
 import { db } from '@/shared/firebase/firebase';
 import PatternLock from '@/shared/components/PatternLock';
 import ImageModal from '@/shared/ui/ImageModal';
+import { Section } from '@/shared/ui/ui';
 import { useAuth } from '../../context/AuthContext';
 import { imageThumb } from '@/shared/lib/imageUrl';
 import { secondHandLabelData } from '@/features/labels/data';
@@ -173,50 +174,47 @@ const ScanResult = () => {
             </div>
 
             {/* Device Info */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-              <p className="text-xs font-bold text-[#002395] uppercase tracking-wide mb-3 border-l-4 border-[#002395] pl-3">
-                Device Info
-              </p>
+            <Section icon="fa-circle-info" title="Device Info">
               <div className="grid grid-cols-2 gap-3">
                 {d?.imei1 && (
                   <div>
-                    <p className="text-xs text-gray-400">IMEI 1</p>
+                    <p className="text-xs text-[#64748b]">IMEI 1</p>
                     <p className="font-semibold text-[#0f172a] text-sm break-all">{d.imei1}</p>
                   </div>
                 )}
                 {d?.imei2 && (
                   <div>
-                    <p className="text-xs text-gray-400">IMEI 2</p>
+                    <p className="text-xs text-[#64748b]">IMEI 2</p>
                     <p className="font-semibold text-[#0f172a] text-sm break-all">{d.imei2}</p>
                   </div>
                 )}
                 {d?.serialNumber && (
                   <div>
-                    <p className="text-xs text-gray-400">Serial Number</p>
+                    <p className="text-xs text-[#64748b]">Serial Number</p>
                     <p className="font-semibold text-[#0f172a] text-sm break-all">{d.serialNumber}</p>
                   </div>
                 )}
                 {d?.condition && (
                   <div>
-                    <p className="text-xs text-gray-400">Condition</p>
+                    <p className="text-xs text-[#64748b]">Condition</p>
                     <p className="font-semibold text-[#0f172a] text-sm">{d.condition}</p>
                   </div>
                 )}
                 {d?.purchaseDate && (
                   <div>
-                    <p className="text-xs text-gray-400">Purchase Date</p>
+                    <p className="text-xs text-[#64748b]">Purchase Date</p>
                     <p className="font-semibold text-[#0f172a] text-sm">{d.purchaseDate}</p>
                   </div>
                 )}
                 {d?.supplier && (
                   <div>
-                    <p className="text-xs text-gray-400">Supplier</p>
+                    <p className="text-xs text-[#64748b]">Supplier</p>
                     <p className="font-semibold text-[#0f172a] text-sm">{d.supplier}</p>
                   </div>
                 )}
                 {d?.createdAt && (
                   <div>
-                    <p className="text-xs text-gray-400">Added On</p>
+                    <p className="text-xs text-[#64748b]">Added On</p>
                     <p className="font-semibold text-[#0f172a] text-sm">
                       {new Date(d.createdAt?.seconds * 1000).toLocaleDateString('en-IN')}
                     </p>
@@ -229,14 +227,11 @@ const ScanResult = () => {
                   <p className="text-sm text-gray-600 bg-gray-50 rounded-xl p-3">{d.specialNotes}</p>
                 </div>
               )}
-            </div>
+            </Section>
 
             {/* Condition Checklist */}
             {d?.conditionChecklist && Object.keys(d.conditionChecklist).length > 0 && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                <p className="text-xs font-bold text-[#002395] uppercase tracking-wide mb-3 border-l-4 border-[#002395] pl-3">
-                  Device Checklist
-                </p>
+              <Section icon="fa-clipboard-check" title="Device Checklist">
                 <div className="grid grid-cols-2 gap-2">
                   {Object.entries(d.conditionChecklist).map(([key, value]) => (
                     <div key={key} className="flex items-center gap-2">
@@ -251,22 +246,19 @@ const ScanResult = () => {
                     </div>
                   ))}
                 </div>
-              </div>
+              </Section>
             )}
 
             {/* Repair Info */}
             {d?.wasRepaired && d?.repairItems?.length > 0 && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                <p className="text-xs font-bold text-[#ED2939] uppercase tracking-wide mb-3 border-l-4 border-[#ED2939] pl-3">
-                  Repair History
-                </p>
+              <Section icon="fa-screwdriver-wrench" title="Repair History" tone="danger">
                 <div className="space-y-2">
                   {d.repairItems.map((item, i) => (
                     <div key={i} className="flex justify-between items-start bg-gray-50 rounded-xl p-3">
                       <div>
                         <p className="text-sm font-semibold text-[#0f172a]">{item.description}</p>
                         {item.technician && (
-                          <p className="text-xs text-gray-400">{item.technician} · {item.date}</p>
+                          <p className="text-xs text-[#64748b]">{item.technician} · {item.date}</p>
                         )}
                       </div>
                       <p className="text-sm font-bold text-[#ED2939]">₹{item.cost}</p>
@@ -277,23 +269,20 @@ const ScanResult = () => {
                   <span className="text-sm font-semibold">Total Repair Cost</span>
                   <span className="text-sm font-bold text-[#ED2939]">₹{d.repairCost}</span>
                 </div>
-              </div>
+              </Section>
             )}
 
             {/* Seller Info */}
             {d?.sellerName && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                <p className="text-xs font-bold text-[#002395] uppercase tracking-wide mb-3 border-l-4 border-[#002395] pl-3">
-                  Seller Details
-                </p>
+              <Section icon="fa-user" title="Seller Details">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-xs text-gray-400">Name</p>
+                    <p className="text-xs text-[#64748b]">Name</p>
                     <p className="font-semibold text-[#0f172a] text-sm">{d.sellerName}</p>
                   </div>
                   {d?.sellerPhone && (
                     <div>
-                      <p className="text-xs text-gray-400">Phone</p>
+                      <p className="text-xs text-[#64748b]">Phone</p>
                       <a href={`tel:${d.sellerPhone}`}
                         className="font-semibold text-green-600 text-sm flex items-center gap-1">
                         <i className="fas fa-phone text-xs"></i>
@@ -302,12 +291,12 @@ const ScanResult = () => {
                     </div>
                   )}
                 </div>
-              </div>
+              </Section>
             )}
 
             {/* Label Info */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-center">
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-[#64748b]">
                 Label #{labelNumber} · Assigned on{' '}
                 {assignedAt?.toDate?.()?.toLocaleDateString('en-IN')}
               </p>
@@ -343,40 +332,37 @@ const ScanResult = () => {
               </span>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-              <p className="text-xs font-bold text-[#002395] uppercase tracking-wide mb-3 border-l-4 border-[#002395] pl-3">
-                Device Info
-              </p>
+            <Section icon="fa-circle-info" title="Device Info">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-xs text-gray-400">Brand / Model</p>
+                  <p className="text-xs text-[#64748b]">Brand / Model</p>
                   <p className="font-semibold text-[#0f172a] text-sm">{serviceOrder?.brand || d?.brand} {serviceOrder?.model || d?.model}</p>
                 </div>
                 {(serviceOrder?.colour || d?.colour) && (
                   <div>
-                    <p className="text-xs text-gray-400">Colour</p>
+                    <p className="text-xs text-[#64748b]">Colour</p>
                     <p className="font-semibold text-[#0f172a] text-sm">{serviceOrder?.colour || d?.colour}</p>
                   </div>
                 )}
                 {(serviceOrder?.imei1 || serviceOrder?.imei || d?.imei1) && (
                   <div className="col-span-2">
-                    <p className="text-xs text-gray-400">IMEI</p>
+                    <p className="text-xs text-[#64748b]">IMEI</p>
                     <p className="font-semibold text-[#0f172a] text-sm break-all">{serviceOrder?.imei1 || serviceOrder?.imei || d?.imei1}</p>
                   </div>
                 )}
                 {serviceOrder?.imei2 && (
                   <div className="col-span-2">
-                    <p className="text-xs text-gray-400">IMEI 2</p>
+                    <p className="text-xs text-[#64748b]">IMEI 2</p>
                     <p className="font-semibold text-[#0f172a] text-sm break-all">{serviceOrder?.imei2}</p>
                   </div>
                 )}
                 <div>
-                  <p className="text-xs text-gray-400">Technician</p>
+                  <p className="text-xs text-[#64748b]">Technician</p>
                   <p className="font-semibold text-[#0f172a] text-sm">{serviceOrder?.technicianName || d?.technicianName || '-'}</p>
                 </div>
                 {currentUser && (serviceOrder?.lockType || d?.lockType) && (serviceOrder?.lockType || d?.lockType) !== 'None' && (
                   <div>
-                    <p className="text-xs text-gray-400">Lock Type</p>
+                    <p className="text-xs text-[#64748b]">Lock Type</p>
                     <p className="font-semibold text-[#0f172a] text-sm">{serviceOrder?.lockType || d?.lockType}</p>
                   </div>
                 )}
@@ -392,17 +378,17 @@ const ScanResult = () => {
               )}
               {(serviceOrder?.rawMaterialCost || d?.rawMaterialCost) > 0 && (
                 <div className="mt-2">
-                  <p className="text-xs text-gray-400">Raw Material Cost</p>
+                  <p className="text-xs text-[#64748b]">Raw Material Cost</p>
                   <p className="font-semibold text-[#0f172a] text-sm">₹{serviceOrder?.rawMaterialCost || d?.rawMaterialCost}</p>
                 </div>
               )}
               {(serviceOrder?.outsideLabourCost || d?.outsideLabourCost) > 0 && (
                 <div className="mt-2">
-                  <p className="text-xs text-gray-400">Outside Labour</p>
+                  <p className="text-xs text-[#64748b]">Outside Labour</p>
                   <p className="font-semibold text-[#0f172a] text-sm">₹{serviceOrder?.outsideLabourCost || d?.outsideLabourCost}</p>
                 </div>
               )}
-            </div>
+            </Section>
 
             {/* TIME TRACKING */}
             {(isValidDate(parsedReceivedAt) || isValidDate(parsedExpectedCompletionAt)) && (
@@ -415,7 +401,7 @@ const ScanResult = () => {
                 <div className="grid grid-cols-2 gap-3">
                   {isValidDate(parsedReceivedAt) && (
                     <div>
-                      <p className="text-xs text-gray-400">Received</p>
+                      <p className="text-xs text-[#64748b]">Received</p>
                       <p className="font-semibold text-[#0f172a] text-sm">
                         {parsedReceivedAt.toLocaleString('en-IN')}
                       </p>
@@ -423,7 +409,7 @@ const ScanResult = () => {
                   )}
                   {isValidDate(parsedExpectedCompletionAt) && (
                     <div>
-                      <p className="text-xs text-gray-400">Expected By</p>
+                      <p className="text-xs text-[#64748b]">Expected By</p>
                       <p className={`font-semibold text-sm ${isOverdue ? 'text-[#ED2939]' : 'text-[#0f172a]'}`}>
                         {parsedExpectedCompletionAt.toLocaleString('en-IN')}
                         {isOverdue && (
@@ -439,10 +425,7 @@ const ScanResult = () => {
             )}
 
             {(serviceOrder?.complaintTypes || d?.complaintTypes)?.length > 0 && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                <p className="text-xs font-bold text-[#ED2939] uppercase tracking-wide mb-3 border-l-4 border-[#ED2939] pl-3">
-                  Issues Reported
-                </p>
+              <Section icon="fa-triangle-exclamation" title="Issues Reported" tone="danger">
                 <div className="flex flex-wrap gap-2">
                   {(serviceOrder?.complaintTypes || d?.complaintTypes)?.map((c, i) => (
                     <span key={i} className="bg-[#ED2939]/10 text-[#ED2939] text-xs px-3 py-1 rounded-full font-medium">
@@ -458,14 +441,11 @@ const ScanResult = () => {
                 {(serviceOrder?.problemDetails || d?.problemDetails) && (
                   <p className="text-sm text-gray-600 mt-3 bg-gray-50 rounded-xl p-3">{serviceOrder?.problemDetails || d?.problemDetails}</p>
                 )}
-              </div>
+              </Section>
             )}
 
             {(serviceOrder?.accessories || d?.accessories || serviceOrder?.accessoriesCollected)?.length > 0 && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                <p className="text-xs font-bold text-[#002395] uppercase tracking-wide mb-3 border-l-4 border-[#002395] pl-3">
-                  Accessories Collected
-                </p>
+              <Section icon="fa-plug" title="Accessories Collected">
                 <div className="flex flex-wrap gap-2">
                   {(serviceOrder?.accessories || d?.accessories || serviceOrder?.accessoriesCollected || []).map((acc, i) => (
                     <span key={i} className="bg-[#002395]/10 text-[#002395] text-xs px-3 py-1 rounded-full">
@@ -473,23 +453,17 @@ const ScanResult = () => {
                     </span>
                   ))}
                 </div>
-              </div>
+              </Section>
             )}
 
             {(serviceOrder?.suggestions || d?.suggestions) && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                <p className="text-xs font-bold text-[#002395] uppercase tracking-wide mb-3 border-l-4 border-[#002395] pl-3">
-                  Notes & Suggestions
-                </p>
+              <Section icon="fa-note-sticky" title="Notes & Suggestions">
                 <p className="text-sm text-gray-600 bg-gray-50 rounded-xl p-3">{serviceOrder?.suggestions || d?.suggestions}</p>
-              </div>
+              </Section>
             )}
 
             {(serviceOrder?.imageUrl || d?.imageUrl) && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                <p className="text-xs font-bold text-[#002395] uppercase tracking-wide mb-3 border-l-4 border-[#002395] pl-3">
-                  Device Image
-                </p>
+              <Section icon="fa-camera" title="Device Image">
                 <div className="flex justify-center">
                   {showDeviceImage ? (
                     <div className="relative w-full">
@@ -521,7 +495,7 @@ const ScanResult = () => {
                     </button>
                   )}
                 </div>
-              </div>
+              </Section>
             )}
           </>
         )}
@@ -535,25 +509,22 @@ const ScanResult = () => {
               </p>
               <p className="text-2xl font-bold text-[#002395] mt-2">₹{d?.salePrice}</p>
             </div>
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-              <p className="text-xs font-bold text-[#002395] uppercase tracking-wide mb-3 border-l-4 border-[#002395] pl-3">
-                Stock Info
-              </p>
+            <Section icon="fa-box" title="Stock Info">
               <div className="grid grid-cols-2 gap-3">
                 {d?.sku && (
                   <div>
-                    <p className="text-xs text-gray-400">SKU</p>
+                    <p className="text-xs text-[#64748b]">SKU</p>
                     <p className="font-semibold text-[#0f172a] text-sm">{d.sku}</p>
                   </div>
                 )}
                 {d?.stockQuantity && (
                   <div>
-                    <p className="text-xs text-gray-400">Stock</p>
+                    <p className="text-xs text-[#64748b]">Stock</p>
                     <p className="font-semibold text-[#0f172a] text-sm">{d.stockQuantity} units</p>
                   </div>
                 )}
               </div>
-            </div>
+            </Section>
           </>
         )}
 
@@ -572,10 +543,7 @@ const ScanResult = () => {
               </div>
             )}
             {d?.items?.length > 0 && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                <p className="text-xs font-bold text-[#002395] uppercase tracking-wide mb-3 border-l-4 border-[#002395] pl-3">
-                  Items
-                </p>
+              <Section icon="fa-box" title="Items">
                 <div className="space-y-2">
                   {d.items.map((item, i) => (
                     <div key={i} className="flex justify-between text-sm">
@@ -584,7 +552,7 @@ const ScanResult = () => {
                     </div>
                   ))}
                 </div>
-              </div>
+              </Section>
             )}
           </>
         )}
