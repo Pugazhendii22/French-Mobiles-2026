@@ -238,9 +238,11 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
   const [error, setError] = useState('');
 
   const [customers, setCustomers] = useState([]);
-  const [showNewCustomer, setShowNewCustomer] = useState(false);
-  const [newCust, setNewCust] = useState({ name: '', phone: '', idType: 'Aadhaar', idNumber: '' });
-  const [savingCustomer, setSavingCustomer] = useState(false);
+  /* No "new customer" mode. Typing a name nobody matches simply means a new
+     seller, created when the purchase is saved - the same rule the brand and
+     model fields follow. */
+  const [sellerIdType, setSellerIdType] = useState(initialData?.sellerIdType || 'Aadhaar');
+  const [sellerIdNumber, setSellerIdNumber] = useState(initialData?.sellerIdNumber || '');
   const [labelAssigned, setLabelAssigned] = useState(false);
   const [assignedLabelNumber, setAssignedLabelNumber] = useState(null);
   const [assigning, setAssigning] = useState(false);
@@ -374,6 +376,8 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
   }, []);
 
   const handleCustomerSelect = (c) => {
+    if (c.idType) setSellerIdType(c.idType);
+    if (c.idNumber) setSellerIdNumber(c.idNumber);
     setFormData(prev => ({
       ...prev,
       sellerCustomerId: c.id,
@@ -383,35 +387,43 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
     }));
   };
 
-  const handleSaveNewCustomer = async () => {
-    if (!newCust.name || !newCust.phone) return alert('Name and phone required');
-    setSavingCustomer(true);
+  /**
+   * The seller, as a customer record. Called from the save path: if the name
+   * typed matched nobody, that person is new and is created now. Previously
+   * this only happened if you first noticed the autocomplete had no match and
+   * then went looking for a "New Customer" button - so a seller typed straight
+   * into the field was never recorded as a customer at all.
+   */
+  const ensureSellerCustomer = async () => {
+    if (formData.sellerCustomerId) return formData.sellerCustomerId;
+    const name = (formData.sellerName || '').trim();
+    const phone = (formData.sellerPhone || '').trim();
+    if (!name || !phone) return '';
+
+    const now = new Date().toISOString();
+    const record = {
+      name,
+      phone,
+      idType: sellerIdType,
+      idNumber: sellerIdNumber,
+      // Without these the customer never reaches the other phones, which
+      // pull changes by updatedAt.
+      createdAt: now,
+      updatedAt: now,
+    };
     try {
-      const now = new Date().toISOString();
-      const record = {
-        name: newCust.name,
-        phone: newCust.phone,
-        idType: newCust.idType,
-        idNumber: newCust.idNumber,
-        // Without these the customer never reaches the other phones, which
-        // pull changes by updatedAt.
-        createdAt: now,
-        updatedAt: now
-      };
       const docRef = await addDoc(collection(db, 'customers'), record);
       const c = { id: docRef.id, ...record };
       rememberCustomer(c);
       setCustomers(prev => [...prev, c]);
-      handleCustomerSelect(c);
-      setShowNewCustomer(false);
-      setNewCust({ name: '', phone: '', idType: 'Aadhaar', idNumber: '' });
+      return docRef.id;
     } catch (err) {
-      alert(err.message);
-    } finally {
-      setSavingCustomer(false);
+      /* Recording the seller must never cost the shop the purchase it just
+         took in. The mobile still saves with the name and phone on it. */
+      console.error('Could not save the seller as a customer:', err);
+      return '';
     }
   };
-
 
   const handleUploadPhoto = async (file, fieldName) => {
     if (!file) return;
@@ -494,11 +506,12 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
     setError('');
     try {
       const sellerSignatureUrl = await uploadSignature();
+      const sellerCustomerId = await ensureSellerCustomer();
       const purchasePrice = Number(formData.purchasePrice) || 0
       const salePrice = Number(formData.salePrice) || 0
       const totalCost = purchasePrice + (wasRepaired ? repairCost : 0)
       const profit = salePrice - totalCost
-      const finalData = { ...formData, conditionChecklist, wasRepaired, repairItems: wasRepaired ? repairItems : [], repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
+      const finalData = { ...formData, conditionChecklist, wasRepaired, repairItems: wasRepaired ? repairItems : [], repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, sellerCustomerId, sellerIdType, sellerIdNumber, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
       delete finalData.customBrand;
 
       if (!initialData) {
@@ -540,7 +553,8 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       const totalCost = purchasePrice + (wasRepaired ? repairCost : 0)
       const profit = salePrice - totalCost
       const sellerSignatureUrl = await uploadSignature();
-      const finalData = { ...formData, conditionChecklist, serialNumber: finalSerialNumber, wasRepaired, repairItems: wasRepaired ? repairItems : [], repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
+      const sellerCustomerId = await ensureSellerCustomer();
+      const finalData = { ...formData, conditionChecklist, serialNumber: finalSerialNumber, wasRepaired, repairItems: wasRepaired ? repairItems : [], repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, sellerCustomerId, sellerIdType, sellerIdNumber, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
       delete finalData.customBrand;
 
       if (!initialData) {
@@ -1187,56 +1201,65 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
           </Section>
 
           {/* ── SELLER ── */}
-          <Section icon="fa-user" title="Seller" hint="Who you bought the phone from">
+          <Section
+            icon="fa-user"
+            title="Seller"
+            hint="Search by name or number. Someone new? Just type them in - they are added when you save."
+          >
             <CustomerAutocomplete
               customers={customers}
               nameValue={formData.sellerName}
               phoneValue={formData.sellerPhone}
               alternatePhoneValue={formData.sellerAlternatePhone}
-              onNameChange={val => setFormData({ ...formData, sellerName: val })}
-              onPhoneChange={val => setFormData({ ...formData, sellerPhone: val })}
+              onNameChange={val => setFormData({ ...formData, sellerName: val, sellerCustomerId: '' })}
+              onPhoneChange={val => setFormData({ ...formData, sellerPhone: val, sellerCustomerId: '' })}
               onAlternatePhoneChange={val => setFormData({ ...formData, sellerAlternatePhone: val })}
               onSelectCustomer={handleCustomerSelect}
             />
+
+            {/* Needed on the purchase declaration the seller signs. */}
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <div>
+                <label className={labelClass}>ID type</label>
+                <select
+                  value={sellerIdType}
+                  onChange={e => setSellerIdType(e.target.value)}
+                  className={inputClass}
+                >
+                  <option>Aadhaar</option>
+                  <option>PAN</option>
+                  <option>Driving License</option>
+                  <option>Voter ID</option>
+                  <option>Other</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>ID number</label>
+                <input
+                  type="text"
+                  value={sellerIdNumber}
+                  onChange={e => setSellerIdNumber(e.target.value)}
+                  placeholder="As on the document"
+                  className={inputClass}
+                />
+              </div>
+            </div>
+
+            <p className="text-xs text-[#64748b] mt-3 leading-relaxed">
+              {formData.sellerCustomerId
+                ? 'This seller is already in your customer list.'
+                : 'This seller will be added to your customer list when you save.'}
+            </p>
+
+            {/* The declaration is the seller's document, so it lives with the
+                seller rather than among the save buttons. */}
             <button
               type="button"
-              onClick={() => setShowNewCustomer(!showNewCustomer)}
-              className="w-full mt-3 border-2 border-dashed border-[#002395]/30 text-[#002395] rounded-xl py-2.5 text-sm font-bold"
+              onClick={handlePrintPurchaseForm}
+              className="w-full mt-3 border border-[#e2e8f0] text-[#002395] rounded-xl py-2.5 text-sm font-semibold"
             >
-              {showNewCustomer ? 'Cancel adding new' : <><i className="fas fa-user-plus mr-2"></i>New Customer</>}
+              <i className="fas fa-file-signature mr-2"></i>Print purchase declaration
             </button>
-
-            {showNewCustomer && (
-              <div className="mt-3 p-3 bg-[#f8fafc] border border-[#e2e8f0] rounded-xl space-y-3">
-                <div>
-                  <label className={labelClass}>Name <span className="text-[#ED2939]">*</span></label>
-                  <input type="text" value={newCust.name} onChange={e => setNewCust({ ...newCust, name: e.target.value })} className={inputClass} />
-                </div>
-                <div>
-                  <label className={labelClass}>Phone <span className="text-[#ED2939]">*</span></label>
-                  <input type="tel" inputMode="tel" pattern="[0-9]*" value={newCust.phone} onChange={e => setNewCust({ ...newCust, phone: e.target.value })} className={inputClass} />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelClass}>ID Type</label>
-                    <select value={newCust.idType} onChange={e => setNewCust({ ...newCust, idType: e.target.value })} className={inputClass}>
-                      <option>Aadhaar</option>
-                      <option>PAN</option>
-                      <option>Driving License</option>
-                      <option>Voter ID</option>
-                      <option>Other</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>ID Number</label>
-                    <input type="text" inputMode="numeric" pattern="[0-9]*" value={newCust.idNumber} onChange={e => setNewCust({ ...newCust, idNumber: e.target.value })} className={inputClass} />
-                  </div>
-                </div>
-                <button type="button" onClick={handleSaveNewCustomer} disabled={savingCustomer} className="w-full bg-[#002395] text-white px-5 py-3 rounded-xl font-bold text-sm disabled:opacity-50">
-                  {savingCustomer ? 'Saving...' : 'Save & Select Customer'}
-                </button>
-              </div>
-            )}
           </Section>
 
           {/* ── SELLER AGREEMENT ── */}
@@ -1303,7 +1326,10 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
         </div>
 
         {/* Footer */}
-        <div className="flex-shrink-0 px-4 py-3 border-t border-gray-100 bg-white pb-safe space-y-2">
+        {/* One way to save, and one variant of it. The declaration moved to the
+            Seller section it belongs to, and Cancel is gone: the X in the header
+            closes this, and so does pulling the sheet down. */}
+        <div className="flex-shrink-0 px-4 py-3 border-t border-gray-100 bg-white pb-safe">
           {saveStatus === 'saved' ? (
             <button type="button" disabled className="w-full bg-green-600 text-white rounded-xl py-3.5 text-sm font-bold opacity-60">
               Saved <i className="fas fa-check ml-1"></i>
@@ -1313,43 +1339,26 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
               type="button"
               onClick={handleSubmit}
               disabled={saveStatus === 'saving' || Object.values(uploadingPhotos).some(v => v)}
-              className="w-full bg-[#002395] text-white rounded-xl py-3.5 text-sm font-bold disabled:opacity-50"
+              className="w-full bg-[#002395] text-white rounded-xl py-3.5 text-[15px] font-bold disabled:opacity-50"
             >
-              {saveStatus === 'saving' ? 'Saving...' : initialData ? 'Save Changes' : 'Add Mobile'}
+              {saveStatus === 'saving'
+                ? 'Saving...'
+                : initialData ? 'Save changes' : 'Save this mobile'}
             </button>
           )}
 
           <button
             type="button"
-            onClick={handlePrintPurchaseForm}
-            className="w-full bg-amber-50 text-amber-700 rounded-xl py-3 text-sm font-bold"
+            onClick={handleSaveAndPrint}
+            disabled={isProcessing || saveStatus.includes('Assigned \u2713')}
+            className="w-full mt-2 text-[13px] font-semibold text-[#002395] py-2 disabled:opacity-40"
           >
-            <i className="fas fa-file-signature mr-2"></i>Print Purchase Declaration
+            {isProcessing
+              ? 'Processing...'
+              : saveStatus.includes('Assigned \u2713')
+                ? 'Label printed'
+                : 'Save and print the price label'}
           </button>
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-3 text-sm font-bold"
-            >
-              {saveStatus === 'saved' || labelAssigned ? 'Done' : 'Cancel'}
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveAndPrint}
-              disabled={isProcessing || saveStatus.includes('Assigned ✓')}
-              className="flex-[2] bg-green-600 text-white rounded-xl py-3 text-sm font-bold disabled:opacity-50"
-            >
-              {isProcessing ? (
-                <span><i className="fas fa-spinner fa-spin mr-2"></i>Processing...</span>
-              ) : saveStatus.includes('Assigned ✓') ? (
-                <span>Done ✓</span>
-              ) : (
-                <span><i className="fas fa-print mr-2"></i>Save &amp; Print</span>
-              )}
-            </button>
-          </div>
         </div>
 
         <PrinterSelector
