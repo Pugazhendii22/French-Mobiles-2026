@@ -46,7 +46,10 @@ const SecondHandList = () => {
   const [mobiles, setMobiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
+  /* Opens on what is still on the shelf. The job at the counter is finding
+     something to sell, and sold devices are history - reachable in a tap, but
+     not what the page should lead with. */
+  const [filterStatus, setFilterStatus] = useState('available');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [showModal, setShowModal] = useState(() => !!location.state);

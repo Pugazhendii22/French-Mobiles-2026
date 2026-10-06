@@ -256,17 +256,29 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
     return fresh;
   };
 
+  /* An untouched form is not empty: it already carries today's date, a status
+     of available and a starting grade. Storing that as a draft meant opening
+     the form, touching nothing, closing it, and being told on the way back in
+     that there was unsaved work to restore. A draft is only a draft once it
+     differs from this. */
+  const [pristine] = useState(() => JSON.stringify(buildFreshForm()));
+
   const [formData, setFormData] = useState(() => {
     /* Anything typed before the form was closed wins, except over a device the
        scanner just handed us - that is a fresh intake, not the old draft. */
-    const draft = prefillData ? null : readDraft(`second-hand:${initialData?.id || 'new'}`);
+    const draft = prefillData ? null : readDraft(draftKey);
     const fresh = buildFreshForm();
     return draft ? { ...fresh, ...draft } : fresh;
   });
 
-  const [restoredDraft, setRestoredDraft] = useState(
-    () => !prefillData && Boolean(readDraft(`second-hand:${initialData?.id || 'new'}`)),
-  );
+  const [restoredDraft, setRestoredDraft] = useState(() => {
+    if (prefillData) return false;
+    const draft = readDraft(draftKey);
+    if (!draft) return false;
+    /* Also covers drafts left behind by the version that stored untouched
+       forms: there is one on disk, but it says nothing the form would not. */
+    return JSON.stringify({ ...buildFreshForm(), ...draft }) !== pristine;
+  });
 
   /* What the form looked like when it was last written. A draft is only worth
      keeping while it differs from that: saving changes formData (the uploaded
@@ -280,9 +292,11 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
      dependency array is read during render, so referencing it any earlier
      throws before the form can draw. */
   useEffect(() => {
-    if (savedSnapshot.current === JSON.stringify(formData)) return;
+    const now = JSON.stringify(formData);
+    if (now === savedSnapshot.current) return;
+    if (now === pristine) { clearDraft(draftKey); return; }
     writeDraft(draftKey, formData);
-  }, [draftKey, formData]);
+  }, [draftKey, formData, pristine]);
 
   // Signature is held as a data URL until save, then uploaded like any other image
   const [signatureData, setSignatureData] = useState(initialData?.sellerSignatureUrl || '');

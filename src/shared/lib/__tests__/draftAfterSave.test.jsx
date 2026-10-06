@@ -87,3 +87,60 @@ describe('the draft after a save', () => {
     expect(readDraft('t')).toMatchObject({ brand: 'Nokia G42' })
   })
 })
+
+/*
+ * The other way a draft appeared when it should not have. A new purchase form
+ * is not blank: it opens with today's date, a status of available and a
+ * starting grade. Those count as content as far as storage is concerned, so an
+ * untouched form stored a draft - and the next person to open it was offered
+ * their "unsaved work" back.
+ */
+const Untouched = ({ guarded }) => {
+  const freshForm = () => ({ brand: '', purchaseDate: '2026-10-06', status: 'available' })
+  const [data, setData] = useState(freshForm)
+  const pristine = useRef(JSON.stringify(freshForm()))
+
+  useEffect(() => {
+    const now = JSON.stringify(data)
+    if (guarded && now === pristine.current) { clearDraft('u'); return }
+    writeDraft('u', data)
+  }, [data, guarded])
+
+  return (
+    <input
+      aria-label="brand"
+      value={data.brand}
+      onChange={e => setData(d => ({ ...d, brand: e.target.value }))}
+    />
+  )
+}
+
+describe('a form nobody typed into', () => {
+  it('leaves a draft behind when the defaults are treated as content', () => {
+    clearDraft('u')
+    render(<Untouched guarded={false} />)
+    expect(readDraft('u')).not.toBeNull()
+  })
+
+  it('leaves nothing behind', () => {
+    clearDraft('u')
+    render(<Untouched guarded />)
+    expect(readDraft('u')).toBeNull()
+  })
+
+  it('starts keeping one the moment something is typed', () => {
+    clearDraft('u')
+    render(<Untouched guarded />)
+    fireEvent.change(screen.getByLabelText('brand'), { target: { value: 'Nokia' } })
+    expect(readDraft('u')).toMatchObject({ brand: 'Nokia' })
+  })
+
+  it('stops again if that typing is undone', () => {
+    clearDraft('u')
+    render(<Untouched guarded />)
+    const input = screen.getByLabelText('brand')
+    fireEvent.change(input, { target: { value: 'Nokia' } })
+    fireEvent.change(input, { target: { value: '' } })
+    expect(readDraft('u')).toBeNull()
+  })
+})
