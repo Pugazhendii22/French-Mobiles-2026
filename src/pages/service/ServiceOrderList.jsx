@@ -33,7 +33,12 @@ const ServiceOrderList = () => {
      dialog answers a downward swipe instead. They have nothing to scroll, so
      the gesture cannot be confused with scrolling. */
   const { sheetProps: billSheet } = useSheetDismiss({ onDismiss: () => setBillModalOpen(false) });
-  const { sheetProps: ratingSheet } = useSheetDismiss({ onDismiss: handleSkipRating });
+  /* Wrapped, not passed bare. `handleSkipRating` is a const declared further
+     down this component, so naming it here evaluates it during render - before
+     it exists - and the page dies with "Cannot access 'handleSkipRating' before
+     initialization". The arrow defers the lookup to the moment the sheet is
+     actually dismissed. */
+  const { sheetProps: ratingSheet } = useSheetDismiss({ onDismiss: () => handleSkipRating() });
   const { sheetProps: doneSheet, handleProps: doneHandle, scrollRef: doneScroll } = useSheetDismiss({ onDismiss: () => setCompleteModalOpen(false) });
   const { sheetProps: waSheet, handleProps: waHandle, scrollRef: waScroll } = useSheetDismiss({ onDismiss: () => setWhatsAppDialog({ open: false }) });
   const [orders, setOrders] = useState([]);
