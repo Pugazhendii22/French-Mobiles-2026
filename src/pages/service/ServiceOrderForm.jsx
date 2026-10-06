@@ -421,20 +421,36 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     return finalData;
   };
 
-  /* Written, so the draft can stop being kept without the save's own changes to
-     formData writing it straight back. */
-  const noteSaved = (finalData) => {
-    /* Exactly what is on screen at the moment it was written. Saving does not
-       alter formData, so anything that differs from this afterwards is an edit
-       somebody made and has not saved yet. */
-    setSavedSnapshot(JSON.stringify(formData));
+  /* What a save handed back. The list returns the id together with the order
+     number it drew from the daily counter; the device page returns the id alone,
+     because an order it is already editing has a number. */
+  const readSaveResult = (saved) => (
+    typeof saved === 'string' || !saved
+      ? { id: saved || null, orderNumber: null }
+      : { id: saved.id || null, orderNumber: saved.orderNumber || null }
+  );
+
+  /* The form as it stands once the save's own answer is folded back in, which is
+     also what stops the draft being kept. The order number only exists after the
+     first write, and it has to be inside the snapshot or the footer would read
+     it as an unsaved edit and offer to save it again.
+
+     The settled form is returned, not just stored: setFormData does not take
+     effect until the next render, so a caller that prints straight after saving
+     would otherwise read the form as it was before the number arrived - and
+     print a job card with no order number on it. */
+  const noteSaved = (finalData, orderNumber) => {
+    const settled = orderNumber ? { ...formData, orderNumber } : formData;
+    if (orderNumber && orderNumber !== formData.orderNumber) setFormData(settled);
+    setSavedSnapshot(JSON.stringify(settled));
     clearDraft(draftKey);
     setRestoredDraft(false);
-    return rememberOptions({
+    rememberOptions({
       brands: finalData.brand,
       models: { [finalData.brand]: finalData.model },
       field_options: { colour: finalData.colour },
     });
+    return settled;
   };
 
   const handleSubmit = async (e) => {
@@ -456,15 +472,14 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     setError('');
     try {
       const finalData = buildFinalData();
-      const newId = await onSave(finalData);
+      const { id: newId, orderNumber } = readSaveResult(await onSave(finalData));
       if (newId) setLocalId(newId);
       setSaveStatus('saved');
-      await noteSaved(finalData);
-      return true;
+      return noteSaved(finalData, orderNumber);
     } catch (err) {
       setError(err.message);
       setSaveStatus('idle');
-      return false;
+      return null;
     }
   };
 
@@ -481,9 +496,10 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       const finalData = buildFinalData();
       finalData.serialNumber = finalSerialNumber;
 
-      const savedDocId = await onSave(finalData);
+      const { id: savedDocId, orderNumber } = readSaveResult(await onSave(finalData));
       if (savedDocId) setLocalId(savedDocId);
-      await noteSaved(finalData);
+      const settled = noteSaved(finalData, orderNumber);
+      finalData.orderNumber = settled.orderNumber || finalData.orderNumber || '';
 
       // Step 3: Auto assign next label number
       const nextLabel = await getLabelNumber();
@@ -596,28 +612,32 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
      save is bookkeeping that should happen on the way there. */
   const handlePrintJobCard = async () => {
     if (!validateAndScroll()) return;
-    // Only write if there is something to write; printing an unchanged order
-    // should not cost a save or move its updatedAt.
-    if (dirty && !(await handleSubmit())) return;
+    /* Only write if there is something to write: printing an unchanged order
+       should cost neither a save nor a bumped updatedAt. What comes back is the
+       form including the order number the save just minted - reading formData
+       here instead would print the version from before it arrived. */
+    const saved = dirty ? await handleSubmit() : null;
+    if (dirty && !saved) return;
+    const source = saved || formData;
 
     const orderData = {
-      orderNumber: formData.orderNumber || initialData?.orderNumber || '',
-      customerName: formData.customerName,
-      customerPhone: formData.customerPhone,
-      alternatePhone: formData.alternatePhone,
-      brand: formData.brand,
-      model: formData.model,
-      colour: formData.colour,
-      imei1: formData.imei1,
-      imei2: formData.imei2,
-      lockType: formData.lockType,
-      technicianName: formData.technicianName,
-      complaintTypes: formData.complaintTypes,
-      otherComplaint: formData.otherComplaint,
-      problemDetails: formData.problemDetails,
-      accessoriesCollected: formData.accessories,
-      estimatedPrice: formData.estimatedPrice,
-      advancePaid: formData.advancePaid,
+      orderNumber: source.orderNumber || initialData?.orderNumber || '',
+      customerName: source.customerName,
+      customerPhone: source.customerPhone,
+      alternatePhone: source.alternatePhone,
+      brand: source.brand,
+      model: source.model,
+      colour: source.colour,
+      imei1: source.imei1,
+      imei2: source.imei2,
+      lockType: source.lockType,
+      technicianName: source.technicianName,
+      complaintTypes: source.complaintTypes,
+      otherComplaint: source.otherComplaint,
+      problemDetails: source.problemDetails,
+      accessoriesCollected: source.accessories,
+      estimatedPrice: source.estimatedPrice,
+      advancePaid: source.advancePaid,
       assignedLabelNumber: assignedLabelNumber
     }
     const html = generateServiceJobCard(orderData, shopDetails)

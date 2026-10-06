@@ -133,6 +133,12 @@ const ServiceOrderList = () => {
       field: 'orderNumber',
     });
 
+  /* Returns the order number as well as the id. The form has no way to work out
+     the number for itself - it is drawn from the daily counter here - and
+     without it back in hand the form thought the order still had none. Saving a
+     second time from the same open form then minted a fresh number and
+     overwrote the first, so an order could be renumbered under a label that had
+     already been printed with the old one. */
   const handleSaveOrder = async (data) => {
     let orderNumber = data.orderNumber;
     if (!orderNumber) {
@@ -161,13 +167,13 @@ const ServiceOrderList = () => {
       const { id, ...updateData } = newOrder;
       await import('firebase/firestore').then(m => m.updateDoc(m.doc(db, 'service_orders', id), updateData));
       fetchOrdersAndCustomers();
-      return id;
+      return { id, orderNumber };
     }
 
     newOrder.createdAt = new Date().toISOString();
     const docRef = await addDoc(collection(db, 'service_orders'), newOrder);
     fetchOrdersAndCustomers();
-    return docRef.id;
+    return { id: docRef.id, orderNumber };
   };
 
   const openCompleteModal = (order) => {
