@@ -12,7 +12,7 @@ import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 import { readDraft, writeDraft, clearDraft } from '@/shared/lib/formDraft';
 import { toDateTimeLocal, nowDateTimeLocal } from '@/shared/lib/datetime';
 import { requireOrderDates } from '@/features/service/orderState';
-import { technicianFor, technicianOptions } from '@/features/service/technician';
+import { technicianFor, technicianOptions, technicianToRemember } from '@/features/service/technician';
 import { getLabelNumber } from '@/features/labels/data';
 import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
 import { generateLabelHTML } from '@/features/labels/printing/printLabel';
@@ -451,7 +451,13 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     rememberOptions({
       brands: finalData.brand,
       models: { [finalData.brand]: finalData.model },
-      field_options: { colour: finalData.colour },
+      field_options: {
+        colour: finalData.colour,
+        /* Only a name from outside the shop. Staff come from the users
+           collection, so filing them here would show them twice in the box and
+           leave a copy behind when they leave. */
+        technician: technicianToRemember(finalData.technicianName, staffOptions),
+      },
     });
     return settled;
   };
@@ -641,7 +647,7 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
      into it may belong to nobody with a login. The rules live in
      features/service/technician.js, because technicianUid decides who can see and
      change the order and that is not something to work out inline. */
-  const technicianNames = technicianOptions(staffOptions);
+  const technicianNames = technicianOptions(staffOptions, fieldOptions.technician);
   const outsideTechnician = technicianFor({
     typed: formData.technicianName, staffOptions,
   }).isOutside;

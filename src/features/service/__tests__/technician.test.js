@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  staffNameOf, matchStaffByName, technicianOptions, technicianFor,
+  staffNameOf, matchStaffByName, technicianOptions, technicianFor, technicianToRemember,
 } from '@/features/service/technician'
 
 const STAFF = [
@@ -102,5 +102,57 @@ describe('clearing the box', () => {
 
   it('is not outside work when it holds only spaces', () => {
     expect(technicianFor({ typed: '   ', staffOptions: STAFF }).isOutside).toBe(false)
+  })
+})
+
+describe('the list the box offers', () => {
+  it('puts the shop first, then the outside names it remembers', () => {
+    expect(technicianOptions(STAFF, ['Kumar Mobile Service', 'Star Electronics'])).toEqual([
+      'Ravi Kumar', 'Anand', 'suresh@shop.in', 'Kumar Mobile Service', 'Star Electronics',
+    ])
+  })
+
+  it('shows a name once when it is in both lists', () => {
+    expect(technicianOptions(STAFF, ['anand', 'Kumar Mobile Service'])).toEqual([
+      'Ravi Kumar', 'Anand', 'suresh@shop.in', 'Kumar Mobile Service',
+    ])
+  })
+
+  it('keeps the staff spelling when the two disagree on case', () => {
+    expect(technicianOptions(STAFF, ['ANAND'])).toContain('Anand')
+    expect(technicianOptions(STAFF, ['ANAND'])).not.toContain('ANAND')
+  })
+
+  it('drops blanks and repeats from what it remembered', () => {
+    expect(technicianOptions([], ['Kumar', '', '  ', 'Kumar', ' Kumar '])).toEqual(['Kumar'])
+  })
+
+  it('works with nothing remembered yet', () => {
+    expect(technicianOptions(STAFF)).toEqual(['Ravi Kumar', 'Anand', 'suresh@shop.in'])
+    expect(technicianOptions(STAFF, undefined)).toHaveLength(3)
+  })
+})
+
+describe('what gets remembered after a save', () => {
+  it('remembers a name from outside the shop', () => {
+    expect(technicianToRemember('Kumar Mobile Service', STAFF)).toBe('Kumar Mobile Service')
+  })
+
+  it('trims it to what should be stored', () => {
+    expect(technicianToRemember('  Star Electronics  ', STAFF)).toBe('Star Electronics')
+  })
+
+  /* Staff come from the users collection. Filing them here would show them twice
+     and leave a copy behind when they leave. */
+  it('never remembers shop staff', () => {
+    expect(technicianToRemember('Anand', STAFF)).toBeNull()
+    expect(technicianToRemember('anand', STAFF)).toBeNull()
+    expect(technicianToRemember('suresh@shop.in', STAFF)).toBeNull()
+  })
+
+  it('remembers nothing from an empty box', () => {
+    expect(technicianToRemember('', STAFF)).toBeNull()
+    expect(technicianToRemember('   ', STAFF)).toBeNull()
+    expect(technicianToRemember(undefined, STAFF)).toBeNull()
   })
 })

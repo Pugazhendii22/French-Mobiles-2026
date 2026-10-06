@@ -33,9 +33,42 @@ export const matchStaffByName = (staffOptions = [], typed) => {
   return (staffOptions || []).find(st => staffNameOf(st).trim().toLowerCase() === needle) || null;
 };
 
-/** The names to offer in the box. */
-export const technicianOptions = (staffOptions = []) =>
-  (staffOptions || []).map(staffNameOf).filter(Boolean);
+/**
+ * The names to offer in the box: shop staff first, then the outside technicians
+ * the shop has typed before and had remembered.
+ *
+ * Deduplicated case-insensitively, because the two lists come from different
+ * places and nothing stops a name being in both - someone typed before they were
+ * given a login, say. Staff win, so the spelling on the staff record is the one
+ * shown.
+ */
+export const technicianOptions = (staffOptions = [], remembered = []) => {
+  const names = [];
+  const seen = new Set();
+  const add = (name) => {
+    const clean = String(name ?? '').trim();
+    const key = clean.toLowerCase();
+    if (!clean || seen.has(key)) return;
+    seen.add(key);
+    names.push(clean);
+  };
+  (staffOptions || []).forEach(st => add(staffNameOf(st)));
+  (remembered || []).forEach(add);
+  return names;
+};
+
+/**
+ * The name worth remembering from a saved order, or null.
+ *
+ * Only a technician from outside: staff names already come from the users
+ * collection, and filing them here would show them twice in the box and leave a
+ * copy behind when somebody leaves.
+ */
+export const technicianToRemember = (typed, staffOptions = []) => {
+  const clean = String(typed ?? '').trim();
+  if (!clean || matchStaffByName(staffOptions, clean)) return null;
+  return clean;
+};
 
 /**
  * What the two technician fields become when the box reads `typed`.
