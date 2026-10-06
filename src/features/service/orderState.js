@@ -95,3 +95,24 @@ export const matchesTab = (order, tab, now = new Date()) => {
     default: return order?.status === tab;
   }
 };
+
+/* ─────────────────────────────────────────────
+   The two dates an order cannot be saved without.
+
+   This lived inline in the intake form, in the Create Order path only. Save &
+   Print built its own copy of the payload and skipped the check, so the two
+   buttons disagreed about what a valid order was: one refused an unparseable
+   date and the other wrote it to Firestore as an Invalid Date, where it then
+   read as neither overdue nor due nor anything else.
+
+   It throws rather than returning a flag, so a caller cannot forget to look.
+────────────────────────────────────────────── */
+export const DATE_ERROR =
+  'Please provide valid datetime values for received and expected completion';
+
+export const requireOrderDates = (receivedAt, expectedCompletionAt) => {
+  const received = normalizeDate(receivedAt);
+  const expected = normalizeDate(expectedCompletionAt);
+  if (!received || !expected) throw new Error(DATE_ERROR);
+  return { received, expected };
+};

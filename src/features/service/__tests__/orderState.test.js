@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   normalizeDate, isClosed, isOverdue, isDueToday,
   stateOf, STATE_META, stateMetaOf, matchesTab, TABS,
+  requireOrderDates, DATE_ERROR,
 } from '@/features/service/orderState'
 
 const NOW = new Date('2026-10-06T14:00:00')
@@ -156,5 +157,32 @@ describe('matchesTab', () => {
 
   it('offers Open first, because that is where the page lands', () => {
     expect(TABS[0]).toBe('Open')
+  })
+})
+
+describe('requireOrderDates', () => {
+  it('gives back both dates when both are usable', () => {
+    const { received, expected } = requireOrderDates('2026-10-06T10:00', '2026-10-08T17:00')
+    expect(received.getHours()).toBe(10)
+    expect(expected.getDate()).toBe(8)
+  })
+
+  /* The divergence this was extracted to close: Save refused these and
+     Save & Print wrote them to Firestore as an Invalid Date. */
+  it('refuses an unparseable date rather than passing it on', () => {
+    expect(() => requireOrderDates('not a date', '2026-10-08T17:00')).toThrow(DATE_ERROR)
+    expect(() => requireOrderDates('2026-10-06T10:00', 'not a date')).toThrow(DATE_ERROR)
+  })
+
+  it('refuses a missing date', () => {
+    expect(() => requireOrderDates('', '2026-10-08T17:00')).toThrow(DATE_ERROR)
+    expect(() => requireOrderDates('2026-10-06T10:00', null)).toThrow(DATE_ERROR)
+    expect(() => requireOrderDates(undefined, undefined)).toThrow(DATE_ERROR)
+  })
+
+  it('accepts a Firestore timestamp, as an edited order carries', () => {
+    const stamp = (iso) => ({ toDate: () => new Date(iso) })
+    const { expected } = requireOrderDates(stamp('2026-10-06T10:00'), stamp('2026-10-08T17:00'))
+    expect(expected.getDate()).toBe(8)
   })
 })

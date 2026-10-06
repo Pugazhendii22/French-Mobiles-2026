@@ -9,6 +9,8 @@ import CustomerAutocomplete from '../../components/common/CustomerAutocomplete';
 import ImeiInput from '@/shared/components/ImeiInput';
 import ComboBox from '@/shared/ui/ComboBox';
 import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
+import { readDraft, writeDraft, clearDraft } from '@/shared/lib/formDraft';
+import { requireOrderDates } from '@/features/service/orderState';
 import { getLabelNumber } from '@/features/labels/data';
 import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
 import { generateLabelHTML } from '@/features/labels/printing/printLabel';
@@ -39,7 +41,18 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
   const MODELS = modelOptions;
 
   /* The grab handle promises this sheet can be pulled down; make it true. */
+  /* Pulling the sheet down might be a slip, so it keeps the draft. The X is a
+     decision, so it throws the draft away - see discardAndClose below. */
   const { sheetProps, handleProps, scrollRef } = useSheetDismiss({ onDismiss: onCancel });
+
+  /* One key per order being edited, so a half-typed new intake and an edit of
+     an existing order cannot overwrite one another. */
+  const draftKey = `service-order:${initialData?.id || 'new'}`;
+
+  const discardAndClose = () => {
+    clearDraft(draftKey);
+    onCancel();
+  };
   const COMPLAINTS = complaintTypeOptions;
   const STATUSES = ['Received', 'In Progress', 'Parts Awaiting', 'Completed', 'Awaiting Customer Approval', 'Returned'];
 
@@ -68,7 +81,7 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     return date.toISOString().slice(0, 16);
   };
 
-  const [formData, setFormData] = useState(() => {
+  const buildFreshForm = () => {
     const nowLocal = new Date().toISOString().slice(0, 16);
     const base = initialData ? {
       ...initialData,
@@ -111,7 +124,55 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       complaintTypes: base.complaintTypes || (base.complaintNature ? [base.complaintNature] : []),
       otherComplaint: base.otherComplaint || (base.customComplaint || '')
     };
+  };
+
+  /* An untouched intake form is not empty: it already carries the time the
+     device arrived, a status of Received, a technician and a lock type of None.
+     Those count as content as far as storage is concerned, so without this an
+     untouched form stored a draft - and the next person to open it was offered
+     their "unsaved work" back. A draft is only a draft once it differs. */
+  const [pristine] = useState(() => JSON.stringify(buildFreshForm()));
+
+  const [formData, setFormData] = useState(() => {
+    /* Whatever was typed before the form was closed wins, except over a device
+       the scanner just handed us - that is a fresh intake, not the old draft. */
+    const draft = prefillData ? null : readDraft(draftKey);
+    const fresh = buildFreshForm();
+    return draft ? { ...fresh, ...draft } : fresh;
   });
+
+  const [restoredDraft, setRestoredDraft] = useState(() => {
+    if (prefillData) return false;
+    const draft = readDraft(draftKey);
+    if (!draft) return false;
+    return JSON.stringify({ ...buildFreshForm(), ...draft }) !== pristine;
+  });
+
+  /* What the form looked like when it was last written. Saving changes formData
+     - the saved id and serial number come back into it - which re-runs the
+     effect below, and without this comparison the draft would be written
+     straight back after being cleared. A saved order would then still greet the
+     next person with "picked up where you left off". */
+  const savedSnapshot = useRef(null);
+
+  /* Keep what has been typed, as it is typed. Declared below formData: the
+     dependency array is read during render, so referencing it any earlier
+     throws before the form can draw. */
+  useEffect(() => {
+    const now = JSON.stringify(formData);
+    if (now === savedSnapshot.current) return;
+    if (now === pristine) { clearDraft(draftKey); return; }
+    writeDraft(draftKey, formData);
+  }, [draftKey, formData, pristine]);
+
+  const startFresh = () => {
+    clearDraft(draftKey);
+    setRestoredDraft(false);
+    setFormData(buildFreshForm());
+    setFieldErrors({});
+    setError('');
+    scrollRef.current?.scrollTo({ top: 0 });
+  };
 
   const [complaintSearch, setComplaintSearch] = useState('');
 
@@ -304,8 +365,71 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     }
   };
 
+  /* ── WHAT ACTUALLY GETS SAVED ──
+     Both save paths build this, and they used to build it separately: forty
+     lines duplicated between Create Order and Save & Print, which had already
+     drifted apart. Save refused an unparseable date and Save & Print wrote it
+     to Firestore as an Invalid Date. One builder, one set of rules.
+     Throws rather than returning a flag, so a caller cannot forget to look. */
+  const buildFinalData = () => {
+    const { received: receivedAtDate, expected: expectedCompletionDate } =
+      requireOrderDates(formData.receivedAt, formData.expectedCompletionAt);
+
+    const finalData = { ...formData, createdBy: currentUser?.uid || '' };
+    delete finalData.customBrand;
+    delete finalData.complaintNature;
+    delete finalData.customComplaint;
+    delete finalData.imei;
+    if (!finalData.complaintTypes.includes('Other')) {
+      finalData.otherComplaint = '';
+    }
+
+    /* Only for a device never saved from this form. Without the localId check,
+       saving and then printing recorded the same handset twice. */
+    if (!initialData && !localId) {
+      recordTacIfNew(finalData.imei1, finalData.brand, finalData.model, currentUser?.uid);
+    }
+
+    const role = userRole?.toLowerCase();
+    if (role === 'admin') {
+      const selectedTech = staffOptions.find(u => u.uid === finalData.technicianUid);
+      finalData.technicianName = selectedTech?.name || finalData.technicianName || currentUser?.displayName || currentUser?.email || '';
+      finalData.technicianUid = finalData.technicianUid || currentUser?.uid || '';
+    } else {
+      // Staff, and anyone whose role has not loaded, own the orders they take in.
+      finalData.technicianName = userName || currentUser?.displayName || currentUser?.email || '';
+      finalData.technicianUid = currentUser?.uid || '';
+    }
+
+    finalData.alternatePhone = formData.alternatePhone || '';
+    finalData.receivedAt = receivedAtDate;
+    finalData.expectedCompletionAt = expectedCompletionDate;
+    if (finalData.lockType !== 'Pattern') finalData.lockPattern = [];
+    if (!['PIN', 'Password', 'Other'].includes(finalData.lockType)) finalData.lockHint = '';
+
+    finalData.serviceProfit = (Number(formData.estimatedPrice) || 0) -
+      (Number(formData.rawMaterialCost) || 0) -
+      (Number(formData.outsideLabourCost) || 0);
+
+    if (localId) finalData.id = localId;
+    return finalData;
+  };
+
+  /* Written, so the draft can stop being kept without the save's own changes to
+     formData writing it straight back. */
+  const noteSaved = (finalData, savedId) => {
+    savedSnapshot.current = JSON.stringify({ ...formData, id: savedId || localId || formData.id });
+    clearDraft(draftKey);
+    setRestoredDraft(false);
+    return rememberOptions({
+      brands: finalData.brand,
+      models: { [finalData.brand]: finalData.model },
+      field_options: { colour: finalData.colour },
+    });
+  };
+
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    e?.preventDefault?.();
     if (!validateAndScroll()) return;
 
     // Only admin can make changes to completed or billed orders
@@ -319,64 +443,19 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       return;
     }
 
-    const receivedAtDate = new Date(formData.receivedAt);
-    const expectedCompletionDate = new Date(formData.expectedCompletionAt);
-    if (Number.isNaN(receivedAtDate.getTime()) || Number.isNaN(expectedCompletionDate.getTime())) {
-      setError('Please provide valid datetime values for received and expected completion');
-      return;
-    }
-
     setSaveStatus('saving');
     setError('');
     try {
-      const finalData = { ...formData, createdBy: currentUser?.uid || '' };
-      delete finalData.customBrand;
-      delete finalData.complaintNature;
-      delete finalData.customComplaint;
-      delete finalData.imei;
-      if (!finalData.complaintTypes.includes('Other')) {
-        finalData.otherComplaint = '';
-      }
-
-      if (!initialData) {
-        recordTacIfNew(finalData.imei1, finalData.brand, finalData.model, currentUser?.uid);
-      }
-
-      if (userRole?.toLowerCase() === 'staff') {
-        finalData.technicianName = userName || currentUser?.displayName || currentUser?.email || '';
-        finalData.technicianUid = currentUser?.uid || '';
-      } else if (userRole?.toLowerCase() === 'admin') {
-        const selectedTech = staffOptions.find(u => u.uid === finalData.technicianUid);
-        finalData.technicianName = selectedTech?.name || finalData.technicianName || currentUser?.displayName || currentUser?.email || '';
-        finalData.technicianUid = finalData.technicianUid || currentUser?.uid || '';
-      } else {
-        finalData.technicianName = userName || currentUser?.displayName || currentUser?.email || '';
-        finalData.technicianUid = currentUser?.uid || '';
-      }
-
-      finalData.alternatePhone = formData.alternatePhone || '';
-      finalData.receivedAt = receivedAtDate;
-      finalData.expectedCompletionAt = expectedCompletionDate;
-      if (finalData.lockType !== 'Pattern') finalData.lockPattern = [];
-      if (!['PIN', 'Password', 'Other'].includes(finalData.lockType)) finalData.lockHint = '';
-
-      finalData.serviceProfit = (Number(formData.estimatedPrice) || 0) -
-        (Number(formData.rawMaterialCost) || 0) -
-        (Number(formData.outsideLabourCost) || 0);
-
-      if (localId) finalData.id = localId;
-
+      const finalData = buildFinalData();
       const newId = await onSave(finalData);
       if (newId) setLocalId(newId);
       setSaveStatus('saved');
-      await rememberOptions({
-        brands: finalData.brand,
-        models: { [finalData.brand]: finalData.model },
-        field_options: { colour: finalData.colour },
-      });
+      await noteSaved(finalData, newId);
+      return true;
     } catch (err) {
       setError(err.message);
       setSaveStatus('idle');
+      return false;
     }
   };
 
@@ -390,50 +469,12 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       const finalSerialNumber = generateSerialNumber();
 
       // Step 2: Save service order to Firestore
-      const finalData = { ...formData, createdBy: currentUser?.uid || '' };
-      delete finalData.customBrand;
-      delete finalData.complaintNature;
-      delete finalData.customComplaint;
-      delete finalData.imei;
-      if (!finalData.complaintTypes.includes('Other')) {
-        finalData.otherComplaint = '';
-      }
-
-      if (!initialData) {
-        recordTacIfNew(finalData.imei1, finalData.brand, finalData.model, currentUser?.uid);
-      }
-
-      if (userRole?.toLowerCase() === 'staff') {
-        finalData.technicianName = userName || currentUser?.displayName || currentUser?.email || '';
-        finalData.technicianUid = currentUser?.uid || '';
-      } else if (userRole?.toLowerCase() === 'admin') {
-        const selectedTech = staffOptions.find(u => u.uid === finalData.technicianUid);
-        finalData.technicianName = selectedTech?.name || finalData.technicianName || currentUser?.displayName || currentUser?.email || '';
-        finalData.technicianUid = finalData.technicianUid || currentUser?.uid || '';
-      } else {
-        finalData.technicianName = userName || currentUser?.displayName || currentUser?.email || '';
-        finalData.technicianUid = currentUser?.uid || '';
-      }
-
-      finalData.alternatePhone = formData.alternatePhone || '';
-      finalData.receivedAt = new Date(formData.receivedAt);
-      finalData.expectedCompletionAt = new Date(formData.expectedCompletionAt);
-      if (finalData.lockType !== 'Pattern') finalData.lockPattern = [];
-      if (!['PIN', 'Password', 'Other'].includes(finalData.lockType)) finalData.lockHint = '';
-      finalData.serviceProfit = (Number(formData.estimatedPrice) || 0) -
-        (Number(formData.rawMaterialCost) || 0) -
-        (Number(formData.outsideLabourCost) || 0);
+      const finalData = buildFinalData();
       finalData.serialNumber = finalSerialNumber;
-
-      if (localId) finalData.id = localId;
 
       const savedDocId = await onSave(finalData);
       if (savedDocId) setLocalId(savedDocId);
-      await rememberOptions({
-        brands: finalData.brand,
-        models: { [finalData.brand]: finalData.model },
-        field_options: { colour: finalData.colour },
-      });
+      await noteSaved(finalData, savedDocId);
 
       // Step 3: Auto assign next label number
       const nextLabel = await getLabelNumber();
@@ -529,7 +570,19 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     }
   };
 
-  const handlePrintJobCard = () => {
+  /* Saved, by either path. Both spellings are in use because Save & Print
+     reports its label number through the same field. */
+  const justSaved = saveStatus === 'saved' || saveStatus.toLowerCase().includes('saved');
+  const busy = saveStatus === 'saving' || isProcessing || uploading;
+
+  /* Printing saves first. Being unable to print a job card until the order had
+     been saved by a separate button was the same mistake the purchase
+     declaration made: the paper the customer is handed is the point, and the
+     save is bookkeeping that should happen on the way there. */
+  const handlePrintJobCard = async () => {
+    if (!validateAndScroll()) return;
+    if (!(await handleSubmit())) return;
+
     const orderData = {
       orderNumber: formData.orderNumber || initialData?.orderNumber || '',
       customerName: formData.customerName,
@@ -624,7 +677,7 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
               </div>
               <button
                 type="button"
-                onClick={onCancel}
+                onClick={discardAndClose}
                 className="w-10 h-10 rounded-full flex items-center justify-center text-gray-400 active:bg-gray-100 shrink-0"
                 aria-label="Close"
               >
@@ -635,6 +688,26 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
 
           {/* Scrollable content */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 space-y-3">
+
+            {/* Say so, rather than silently showing someone a form that is not
+                as empty as they expect. */}
+            {restoredDraft && (
+              <div className="bg-[#002395]/5 border border-[#002395]/20 rounded-2xl px-4 py-3 flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-[#0f172a]">Picked up where you left off</p>
+                  <p className="text-xs text-[#64748b] mt-0.5 leading-relaxed">
+                    This intake still had your unsaved details from last time.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={startFresh}
+                  className="text-xs font-bold text-[#002395] shrink-0 py-1"
+                >
+                  Start empty
+                </button>
+              </div>
+            )}
 
             {error && (
               <div className="bg-red-50 border border-red-200 text-[#ED2939] px-4 py-3 rounded-2xl text-sm font-medium">
@@ -1034,52 +1107,56 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
 
           </div>
 
-          {/* Footer */}
-          <div className="flex-shrink-0 px-4 py-3 border-t border-gray-100 bg-white pb-safe space-y-2">
+          {/* ── FOOTER ──
+              One thing to do, and quieter ways to do the rest. This was four
+              filled buttons in three different colours - blue, green and amber -
+              stacked at the bottom of the form, with nothing to say which was
+              the one you wanted. The paperwork actions save on their way to the
+              printer, so none of them has to be unlocked by pressing something
+              else first. */}
+          <div className="flex-shrink-0 px-4 py-3 border-t border-gray-100 bg-white pb-safe">
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={saveStatus === 'saving' || uploading || saveStatus.includes('saved') || saveStatus.includes('Saved')}
+              disabled={busy}
               className="w-full bg-[#002395] text-white rounded-xl py-3.5 text-sm font-bold disabled:opacity-50"
             >
-              {saveStatus === 'saving' ? 'Saving...' : saveStatus.includes('saved') || saveStatus.includes('Saved') ? 'Saved ✓' : initialData ? 'Save Changes' : 'Create Order'}
+              {saveStatus === 'saving' ? 'Saving…'
+                : justSaved ? 'Saved ✓'
+                  : initialData ? 'Save changes' : 'Create order'}
             </button>
 
-            <div className="flex gap-2">
+            {!initialData && (
               <button
                 type="button"
-                onClick={onCancel}
-                className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-3 text-sm font-bold"
+                onClick={handleSaveAndPrint}
+                disabled={busy || saveStatus.includes('Assigned ✓')}
+                className="w-full mt-2 border border-[#002395] text-[#002395] rounded-xl py-3 text-sm font-bold disabled:opacity-50"
+              >
+                {isProcessing ? 'Printing…'
+                  : saveStatus.includes('Assigned ✓') ? `Label #${assignedLabelNumber} printed ✓`
+                    : 'Save and print the label'}
+              </button>
+            )}
+
+            <div className="flex items-center justify-center gap-4 mt-2.5">
+              <button
+                type="button"
+                onClick={discardAndClose}
+                className="text-[13px] font-semibold text-[#64748b] py-1.5"
               >
                 Cancel
               </button>
-              {!initialData && (
-                <button
-                  type="button"
-                  onClick={handleSaveAndPrint}
-                  disabled={isProcessing || saveStatus.includes('Assigned ✓')}
-                  className="flex-[2] bg-green-600 text-white rounded-xl py-3 text-sm font-bold disabled:opacity-50"
-                >
-                  {isProcessing ? (
-                    <span><i className="fas fa-spinner fa-spin mr-2"></i>Processing...</span>
-                  ) : saveStatus.includes('Assigned ✓') ? (
-                    <span>Done ✓</span>
-                  ) : (
-                    <span><i className="fas fa-print mr-2"></i>Save &amp; Print</span>
-                  )}
-                </button>
-              )}
-            </div>
-
-            {(saveStatus === 'saved' || saveStatus.includes('Assigned ✓') || initialData) && (
+              <span aria-hidden="true" className="text-[#e2e8f0]">·</span>
               <button
                 type="button"
                 onClick={handlePrintJobCard}
-                className="w-full bg-amber-500 text-white rounded-xl py-3 text-sm font-bold"
+                disabled={busy}
+                className="text-[13px] font-semibold text-[#002395] py-1.5 disabled:opacity-50"
               >
-                <i className="fas fa-file-alt mr-2"></i> Print Job Card
+                Print job card
               </button>
-            )}
+            </div>
           </div>
         </div>
 
