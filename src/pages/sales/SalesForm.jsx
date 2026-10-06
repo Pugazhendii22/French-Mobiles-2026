@@ -475,6 +475,7 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
               onPhoneChange={val => setFormData({...formData, customerPhone: val, customerId: ''})}
               onAlternatePhoneChange={val => setFormData({...formData, alternatePhone: val})}
               onSelectCustomer={handleCustomerSelect}
+              nameError={fieldErrors.customerName}
             />
             <FieldError message={fieldErrors.customerName} />
           </div>
@@ -544,7 +545,8 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
         {formData.items.length === 0 ? (
           <div ref={itemsRef} className="text-center py-8 bg-gray-50 rounded-xl mt-3">
             <i className="fas fa-box-open text-3xl text-gray-200 mb-2 block"></i>
-            <p className="text-[#64748b] text-sm">No items yet</p>
+            <p className="text-[#64748b] text-sm font-semibold">Nothing on this bill yet</p>
+            <p className="text-[#64748b] text-xs mt-1">Scan a label, or add a line by hand above. A sale needs at least one.</p>
             <FieldError message={fieldErrors.items} />
           </div>
         ) : (
@@ -784,7 +786,7 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
 
           {!financed && (
             <div ref={amountPaidRef}>
-              <label className={labelClass}>Amount Paid</label>
+              <label className={labelClass}>Amount paid <span className="text-[#ED2939]">*</span></label>
               <input
                 type="number"
                 inputMode="numeric"
