@@ -720,10 +720,7 @@ const ServiceOrderView = () => {
           )}
 
           {/* ── TIME TRACKING ── */}
-          {(order?.receivedAt || order?.expectedCompletionAt) && (() => {
-            const overdue = order?.status !== 'Completed' && order?.expectedCompletionAt &&
-              new Date(order?.expectedCompletionAt?.toDate?.() || order.expectedCompletionAt) < new Date();
-            return (
+          {(order?.receivedAt || order?.expectedCompletionAt) && (
               <Section
                 icon="fa-clock"
                 title="Time Tracking"
@@ -747,8 +744,7 @@ const ServiceOrderView = () => {
                   )}
                 </InfoGrid>
               </Section>
-            );
-          })()}
+          )}
 
           {/* ── SERVICE DETAILS ── */}
           <Section icon="fa-screwdriver-wrench" title="Service Details">

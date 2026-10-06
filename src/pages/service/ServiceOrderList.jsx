@@ -13,7 +13,7 @@ import { nextDailyNumber } from '@/shared/data/counters';
 import { loadCustomers, rememberCustomer } from '../../utils/customerCache';
 import { SearchBar, CollapsibleFilter, EmptyState, ListSkeleton } from '@/shared/ui/ui';
 import { describeFirebaseError } from '@/shared/firebase/firebaseError';
-import { openWhatsApp as openWhatsAppChat, isWhatsAppReady } from '@/shared/lib/phone';
+import { openWhatsApp as openWhatsAppChat, isWhatsAppReady, isSamePhone } from '@/shared/lib/phone';
 import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 import { matchesQuery } from '@/shared/lib/searchMatch';
 import { checklistEntries, blankChecklist, carryOver, allChecked } from '@/features/service/checklist';
@@ -141,7 +141,10 @@ const ServiceOrderList = () => {
       updatedAt: new Date().toISOString()
     };
 
-    if (!customers.find(c => c.phone === data.customerPhone)) {
+    /* Compared on the normalised number rather than the exact string. A phone
+       typed "98765 43210" against a stored "9876543210" is the same customer, and
+       an exact match filed a second record for them every time. */
+    if (!customers.some(c => isSamePhone(c.phone, data.customerPhone))) {
       const now = new Date().toISOString();
       const record = {
         name: data.customerName,
@@ -218,7 +221,7 @@ const ServiceOrderList = () => {
       }
       
       const finalOrder = { ...selectedOrderForComplete, ...updateData };
-      setOrders(orders.map(o => o.id === selectedOrderForComplete.id ? finalOrder : o));
+      setOrders(prev => prev.map(o => o.id === selectedOrderForComplete.id ? finalOrder : o));
       setCompleteModalOpen(false);
 
       if (finalOrder.customerPhone) {
@@ -357,11 +360,11 @@ const ServiceOrderList = () => {
     }
 
     try {
-      // Update Firestore
-      const updateData = { status: newStatus, updatedAt: new Date() }
-      if (newStatus === 'Completed') {
-        updateData.actualCompletedAt = new Date()
-      }
+      /* An ISO string, as every other write to this collection uses. This was a
+         Date, which Firestore stores as a Timestamp - so service_orders.updatedAt
+         held one of two types depending on which screen last touched it, and
+         anything sorting or parsing it would have had to handle both. */
+      const updateData = { status: newStatus, updatedAt: new Date().toISOString() }
       await updateDoc(doc(db, 'service_orders', order.id), updateData)
 
       // Update local state immediately
@@ -382,11 +385,6 @@ const ServiceOrderList = () => {
           message = `Hi ${order.customerName}, we are waiting for parts for your ${order.brand} ${order.model} (Order: ${order.orderNumber}). We will update you as soon as parts arrive. - French Mobiles`
         } else if (newStatus === 'Awaiting Customer Approval') {
           message = `Hi ${order.customerName}, your ${order.brand} ${order.model} (Order: ${order.orderNumber}) requires your approval for additional work. Please visit or call us. - French Mobiles`
-        } else if (newStatus === 'Completed') {
-          const finalAmount = order.estimatedPrice || 0
-          const advance = order.advancePaid || 0
-          const balance = finalAmount - advance
-          message = `Hi ${order.customerName}, your ${order.brand} ${order.model} (Order: ${order.orderNumber}) is ready for pickup! 🎉\n\nService Amount: Rs.${finalAmount}\nAdvance Paid: Rs.${advance}\nBalance Due: Rs.${balance}\n\nPlease visit us to collect your device. - French Mobiles`
         } else if (newStatus === 'Returned') {
           message = `Hi ${order.customerName}, your ${order.brand} ${order.model} (Order: ${order.orderNumber}) has been returned. Thank you for choosing French Mobiles. - French Mobiles`
         }
@@ -425,8 +423,12 @@ const ServiceOrderList = () => {
       o.orderNumber, o.brand, o.model, o.imei1, o.imei2, o.serialNumber,
     ]);
 
+    /* Both ends read as local time. `new Date('2026-10-06')` is parsed as UTC
+       midnight while `new Date('2026-10-06T23:59:59')` is parsed as local, so
+       From and To were anchored five and a half hours apart here and From = To =
+       today quietly dropped the start of the day. */
     const orderDate = o.createdAt ? new Date(o.createdAt) : null;
-    const matchesFrom = !fromDate || (orderDate && orderDate >= new Date(fromDate));
+    const matchesFrom = !fromDate || (orderDate && orderDate >= new Date(fromDate + 'T00:00:00'));
     const matchesTo = !toDate || (orderDate && orderDate <= new Date(toDate + 'T23:59:59'));
 
     return matchesSearch && matchesTab(o, tab, now) && matchesFrom && matchesTo;

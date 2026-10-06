@@ -84,3 +84,22 @@ export const openWhatsApp = (raw, message = '') => {
   window.open(url, '_blank', 'noopener');
   return true;
 };
+
+/**
+ * Whether two numbers reach the same person, however they were typed.
+ *
+ * The service list decided this with `c.phone === data.customerPhone`, so a
+ * number typed "98765 43210" against a stored "9876543210" read as a new
+ * customer and filed a second record for them. Formatting carries no meaning
+ * here: +91, a leading 0, spaces and dashes all dial the same handset.
+ *
+ * Falls back to an exact comparison when a value is not a number this helper
+ * recognises - a landline or a short code - so nothing that used to match stops
+ * matching.
+ */
+export const isSamePhone = (a, b) => {
+  const left = normalizeIndianPhone(a);
+  const right = normalizeIndianPhone(b);
+  if (left && right) return left === right;
+  return String(a ?? '').trim() === String(b ?? '').trim();
+};
