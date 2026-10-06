@@ -113,6 +113,46 @@ select {
   min-height: 48px;
 }
 
+/* Date fields are drawn by the browser, so an untouched one looks nothing like
+   the text field beside it: a different inner padding, a grey-blue stock
+   calendar glyph, and spin buttons on some engines. The native picker itself is
+   kept - on a phone the OS date wheel beats anything we would build, and it is
+   accessible for free - but the field it opens from is normalised to match
+   every other control. */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  color: #0f172a;
+}
+
+/* Sit the value on the same baseline as text inputs. */
+input[type="date"]::-webkit-datetime-edit {
+  padding: 0;
+  line-height: normal;
+}
+
+/* An empty date reads as a placeholder rather than hard black. */
+input[type="date"]:invalid::-webkit-datetime-edit {
+  color: #94a3b8;
+}
+
+/* One calendar glyph, in the brand blue, with a real tap target. */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin-left: 8px;
+  cursor: pointer;
+  opacity: 1;
+  filter: invert(13%) sepia(88%) saturate(4000%) hue-rotate(227deg) brightness(70%) contrast(110%);
+}
+
+input[type="date"]::-webkit-inner-spin-button,
+input[type="date"]::-webkit-clear-button {
+  display: none;
+}
+
 /* ─────────────────────────────────────────────
    HELPERS
 ────────────────────────────────────────────── */

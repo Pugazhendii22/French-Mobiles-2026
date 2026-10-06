@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { inputClass, errorInput } from './uiTokens'
 
 /* A dropdown you can type into. The list is whatever it is handed; a value
    that matches nothing is still a valid value, because the forms using this
@@ -47,8 +48,9 @@ const ComboBox = ({
     }
   }
 
-  const base = 'w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none bg-white'
-  const border = error ? 'border-[#ED2939]' : 'border-gray-300 focus:border-[#002395]'
+  /* The same tokens every other field uses. A combobox that sits beside a
+     date or a text input has to be the same height and carry the same border,
+     or the row looks broken. */
   const dim = disabled ? 'disabled:bg-gray-50 disabled:text-gray-400' : ''
 
   return (
@@ -65,7 +67,7 @@ const ComboBox = ({
         onFocus={() => { if (!disabled) setOpen(true) }}
         onChange={e => { onChange(e.target.value); setOpen(true) }}
         onKeyDown={onKeyDown}
-        className={`${base} ${border} ${dim} ${className}`}
+        className={`${inputClass} ${error ? errorInput : ''} ${dim} ${className}`}
       />
 
       {open && !disabled && (

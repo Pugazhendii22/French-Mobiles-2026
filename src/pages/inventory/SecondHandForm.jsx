@@ -13,6 +13,7 @@ import { generateSecondHandPurchaseForm } from '../../utils/generateSecondHandPu
 import SignaturePad from '../../components/common/SignaturePad';
 import ComboBox from '@/shared/ui/ComboBox';
 import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
+import { readDraft, writeDraft, clearDraft } from '@/shared/lib/formDraft';
 import { imageThumb } from '@/shared/lib/imageUrl';
 import { loadCustomers, rememberCustomer } from '../../utils/customerCache';
 import { recordTacIfNew } from '@/features/labels/tacLookup';
@@ -125,6 +126,9 @@ const GRADE_META = {
 };
 
 const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
+  /* One draft per form. Editing an existing device keeps its own, so an
+     interrupted edit cannot leak into a new purchase. */
+  const draftKey = `second-hand:${initialData?.id || 'new'}`;
   const { currentUser } = useAuth();
   const {
     deviceChecklist, complaintTypes, shopDetails, purchaseTerms,
@@ -135,7 +139,20 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
 
   /* The grab handle at the top of this sheet announced that it could be pulled
      down; until now only Cancel actually closed it. */
+  /* Pulling the sheet down might be a slip, so it keeps the draft. The X is a
+     decision, so it throws the draft away - see discardAndClose below. */
   const { sheetProps, handleProps, scrollRef } = useSheetDismiss({ onDismiss: onCancel });
+
+  const discardAndClose = () => {
+    clearDraft(draftKey);
+    onCancel();
+  };
+
+  const startFresh = () => {
+    clearDraft(draftKey);
+    setRestoredDraft(false);
+    onCancel();
+  };
 
   /* A scan-to-create flow (see ScannerPage) may hand us a recognised brand/model
      from the TAC database - only relevant for a brand-new record. The TAC data
@@ -192,7 +209,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
     const manualOverride = base.gradeManualOverride || false;
     const initialCondition = base.condition || (manualOverride ? base.condition : autoGrade);
 
-    return {
+    const fresh = {
       brand: initialData ? (base.brand || '') : prefillBrand,
       customBrand: initialData ? (base.customBrand || '') : '',
       model: initialData ? (base.model || '') : (prefillModelMatch || prefillData?.model || ''),
@@ -228,7 +245,21 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       sellerIdVerified: base.sellerIdVerified || false,
       agreementAcceptedAt: base.agreementAcceptedAt || ''
     };
+
+    /* Anything typed before the form was closed wins, except over a device the
+       scanner just handed us - that is a fresh intake, not the old draft. */
+    const draft = prefillData ? null : readDraft(`second-hand:${initialData?.id || 'new'}`);
+    return draft ? { ...fresh, ...draft } : fresh;
   });
+
+  const [restoredDraft, setRestoredDraft] = useState(
+    () => !prefillData && Boolean(readDraft(`second-hand:${initialData?.id || 'new'}`)),
+  );
+
+  /* Keep what has been typed, as it is typed. Declared below formData: the
+     dependency array is read during render, so referencing it any earlier
+     throws before the form can draw. */
+  useEffect(() => { writeDraft(draftKey, formData); }, [draftKey, formData]);
 
   // Signature is held as a data URL until save, then uploaded like any other image
   const [signatureData, setSignatureData] = useState(initialData?.sellerSignatureUrl || '');
@@ -523,6 +554,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       }
 
       const newId = await onSave(finalData);
+      clearDraft(draftKey);
       if (newId) setLocalId(newId);
       setSaveStatus('saved');
       await rememberOptions({
@@ -566,6 +598,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       }
 
       const savedDocId = await onSave(finalData);
+      clearDraft(draftKey);
       if (savedDocId) setLocalId(savedDocId);
       await rememberOptions({
         brands: finalData.brand,
@@ -767,7 +800,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
               )}
               <button
                 type="button"
-                onClick={onCancel}
+                onClick={discardAndClose}
                 className="w-10 h-10 rounded-full flex items-center justify-center text-gray-400 active:bg-gray-100"
                 aria-label="Close"
               >
@@ -779,6 +812,26 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
 
         {/* Scrollable content */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 space-y-3">
+
+          {/* Say so, rather than silently showing someone a form that is not
+              as empty as they expect. */}
+          {restoredDraft && (
+            <div className="bg-[#002395]/5 border border-[#002395]/20 rounded-2xl px-4 py-3 flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-[#0f172a]">Picked up where you left off</p>
+                <p className="text-xs text-[#64748b] mt-0.5 leading-relaxed">
+                  This form still had your unsaved details from last time.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={startFresh}
+                className="text-xs font-bold text-[#002395] shrink-0 py-1"
+              >
+                Start empty
+              </button>
+            </div>
+          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-[#ED2939] px-4 py-3 rounded-2xl text-sm font-medium">
