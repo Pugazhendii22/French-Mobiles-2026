@@ -554,6 +554,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       }
 
       const newId = await onSave(finalData);
+      setFormData(prev => ({ ...prev, sellerSignatureUrl, sellerCustomerId }));
       clearDraft(draftKey);
       if (newId) setLocalId(newId);
       setSaveStatus('saved');
@@ -598,6 +599,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       }
 
       const savedDocId = await onSave(finalData);
+      setFormData(prev => ({ ...prev, sellerSignatureUrl, sellerCustomerId }));
       clearDraft(draftKey);
       if (savedDocId) setLocalId(savedDocId);
       await rememberOptions({
@@ -1271,7 +1273,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
             />
 
             {/* Needed on the purchase declaration the seller signs. */}
-            <div className="grid grid-cols-2 gap-3 mt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
               <div>
                 <label className={labelClass}>ID type</label>
                 <select
@@ -1304,15 +1306,6 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
                 : 'This seller will be added to your customer list when you save.'}
             </p>
 
-            {/* The declaration is the seller's document, so it lives with the
-                seller rather than among the save buttons. */}
-            <button
-              type="button"
-              onClick={handlePrintPurchaseForm}
-              className="w-full mt-3 border border-[#e2e8f0] text-[#002395] rounded-xl py-2.5 text-sm font-semibold"
-            >
-              <i className="fas fa-file-signature mr-2"></i>Print purchase declaration
-            </button>
           </Section>
 
           {/* ── SELLER AGREEMENT ── */}
@@ -1363,6 +1356,27 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
                     if (fieldErrors.agreement) setFieldErrors(prev => ({ ...prev, agreement: '' }))
                   }}
                 />
+              </div>
+
+              {/* The declaration belongs here, under the signature it carries,
+                  and only once the purchase is saved. A signature is a drawing
+                  in the browser until it is saved - printed any earlier the
+                  declaration comes out with an empty signature box, and
+                  describes a purchase with no record behind it. */}
+              <div className="mt-4 pt-3 border-t border-[#e2e8f0]">
+                <button
+                  type="button"
+                  onClick={handlePrintPurchaseForm}
+                  disabled={!localId}
+                  className="w-full border border-[#e2e8f0] text-[#002395] rounded-xl py-2.5 text-sm font-semibold disabled:text-[#94a3b8] disabled:bg-[#f8fafc]"
+                >
+                  <i className="fas fa-file-signature mr-2"></i>Print purchase declaration
+                </button>
+                <p className="text-[12px] text-[#64748b] mt-2 leading-relaxed">
+                  {localId
+                    ? "Prints with the seller's signature and the shop's terms, ready to sign and file."
+                    : 'Save the purchase first. The declaration prints the signature, which is only stored once you save.'}
+                </p>
               </div>
 
               <FieldError message={fieldErrors.agreement} />

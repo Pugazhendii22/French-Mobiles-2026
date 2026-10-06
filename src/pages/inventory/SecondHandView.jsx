@@ -411,19 +411,7 @@ const SecondHandView = () => {
 
         {/* ── SELLER ── */}
         {mobile?.sellerCustomerId && (
-          <Section
-            icon="fa-user"
-            title="Seller"
-            hint="Who handed this phone over, and how to reach them."
-            action={
-              <button
-                onClick={handlePrintPurchaseForm}
-                className="text-[12px] font-semibold text-[#002395] shrink-0"
-              >
-                Print declaration
-              </button>
-            }
-          >
+          <Section icon="fa-user" title="Seller" hint="Who handed this phone over, and how to reach them.">
             <InfoGrid>
               <InfoRow label="Name" value={mobile?.sellerName} />
               <InfoRow label="Phone" value={mobile?.sellerPhone} href={`tel:${mobile?.sellerPhone}`} />
@@ -439,7 +427,20 @@ const SecondHandView = () => {
 
         {/* ── SELLER AGREEMENT ── */}
         {(mobile?.sellerSignatureUrl || mobile?.agreementAcceptedAt) && (
-          <Section icon="fa-file-signature" title="Seller Agreement" tone="danger" hint="Their signature confirming the sale is final and the phone is theirs to sell.">
+          <Section
+            icon="fa-file-signature"
+            title="Seller Agreement"
+            tone="danger"
+            hint="Their signature confirming the sale is final and the phone is theirs to sell."
+            action={
+              <button
+                onClick={handlePrintPurchaseForm}
+                className="text-[12px] font-semibold text-[#002395] shrink-0"
+              >
+                Print declaration
+              </button>
+            }
+          >
             {mobile?.sellerSignatureUrl && (
               <div className="border border-[#e2e8f0] rounded-xl bg-white p-2">
                 <img
