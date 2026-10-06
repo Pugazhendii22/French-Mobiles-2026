@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { money } from '@/shared/ui/uiTokens';
 import { deleteDoc, doc } from 'firebase/firestore';
 import { db } from '@/shared/firebase/firebase';
 import { Link, useLocation } from 'react-router-dom';
@@ -141,7 +142,7 @@ const SalesList = () => {
         </CollapsibleFilter>
 
         {!loading && (
-          <p className="text-xs text-gray-400 px-1">
+          <p className="text-xs text-[#64748b] px-1">
             {filteredSales.length} of {sales.length} {sales.length === 1 ? 'sale' : 'sales'}
           </p>
         )}
@@ -174,17 +175,17 @@ const SalesList = () => {
                         </Chip>
                         {sale.paymentMethod && <Chip>{sale.paymentMethod}</Chip>}
                       </div>
-                      <p className="text-gray-400 text-[11px] mt-1.5">
+                      <p className="text-[#64748b] text-[11px] mt-1.5">
                         {sale.createdAt?.toDate?.()?.toLocaleDateString('en-IN')}
                       </p>
                     </div>
 
                     <div className="text-right shrink-0">
-                      <p className="font-bold text-[#002395] text-base leading-tight">₹{sale.totalAmount}</p>
+                      <p className="font-bold text-[#002395] text-base leading-tight">{money(sale.totalAmount)}</p>
                       <span className={`inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full font-bold ${
                         isPaid ? 'bg-green-100 text-green-700' : 'bg-[#ED2939]/10 text-[#ED2939]'
                       }`}>
-                        {isPaid ? 'Paid' : `Due ₹${sale.balanceDue}`}
+                        {isPaid ? 'Paid' : `Due ${money(sale.balanceDue)}`}
                       </span>
                     </div>
                   </div>

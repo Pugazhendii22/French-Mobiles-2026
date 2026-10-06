@@ -14,6 +14,7 @@ import { generateServiceFinalBill } from '../../utils/generateServiceFinalBill';
 import PrinterSelector from '@/features/labels/printing/PrinterSelector';
 import ImageModal from '@/shared/ui/ImageModal';
 import Layout from '@/shared/ui/Layout';
+import { money } from '@/shared/ui/uiTokens';
 import { Section, InfoRow, InfoGrid, Chip } from '@/shared/ui/ui';
 import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
 import { imageThumb } from '@/shared/lib/imageUrl';
@@ -24,7 +25,6 @@ import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 import { isOverdue, stateMetaOf, statusOptionsFor } from '@/features/service/orderState';
 import { checklistEntries, blankChecklist, allChecked } from '@/features/service/checklist';
 
-const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
 const ServiceOrderView = () => {
   const { id } = useParams();

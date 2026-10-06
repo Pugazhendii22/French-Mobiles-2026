@@ -11,7 +11,7 @@ import { imageThumb } from '@/shared/lib/imageUrl';
 import { describeFirebaseError } from '@/shared/firebase/firebaseError';
 import { openWhatsApp as openWhatsAppChat, isWhatsAppReady } from '@/shared/lib/phone';
 import { secondHandLabelData, syncLabelSnapshot } from '@/features/labels/data';
-import { gradeOf } from '@/shared/ui/uiTokens';
+import { gradeOf, money } from '@/shared/ui/uiTokens';
 import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 import { matchesQuery } from '@/shared/lib/searchMatch';
 import NewSaleModal from '@/components/sales/NewSaleModal';
@@ -38,7 +38,6 @@ import NewSaleModal from '@/components/sales/NewSaleModal';
    a border, or a label for "sold".
 ────────────────────────────────────────────── */
 
-const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
 /** "8 + 128" reads as one spec, the way staff say it out loud. */
 const memoryOf = (m) => [m.ram, m.rom].filter(Boolean).join(' + ');
