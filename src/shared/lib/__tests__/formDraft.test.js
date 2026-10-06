@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import {
   readDraft, writeDraft, clearDraft, DRAFT_MAX_AGE_MS,
 } from '@/shared/lib/formDraft'

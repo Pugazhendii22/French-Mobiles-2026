@@ -268,10 +268,21 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
     () => !prefillData && Boolean(readDraft(`second-hand:${initialData?.id || 'new'}`)),
   );
 
+  /* What the form looked like when it was last written. A draft is only worth
+     keeping while it differs from that: saving changes formData (the uploaded
+     signature comes back into it), which re-runs this effect, and without the
+     comparison the draft would be written straight back after being cleared -
+     so a saved purchase would still greet the next person with "picked up
+     where you left off". */
+  const savedSnapshot = useRef(null);
+
   /* Keep what has been typed, as it is typed. Declared below formData: the
      dependency array is read during render, so referencing it any earlier
      throws before the form can draw. */
-  useEffect(() => { writeDraft(draftKey, formData); }, [draftKey, formData]);
+  useEffect(() => {
+    if (savedSnapshot.current === JSON.stringify(formData)) return;
+    writeDraft(draftKey, formData);
+  }, [draftKey, formData]);
 
   // Signature is held as a data URL until save, then uploaded like any other image
   const [signatureData, setSignatureData] = useState(initialData?.sellerSignatureUrl || '');
@@ -571,7 +582,9 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       }
 
       const newId = await onSave(finalData);
-      setFormData(prev => ({ ...prev, sellerSignatureUrl, sellerCustomerId }));
+      const settled = { ...formData, sellerSignatureUrl, sellerCustomerId };
+      savedSnapshot.current = JSON.stringify(settled);
+      setFormData(settled);
       clearDraft(draftKey);
       if (newId) setLocalId(newId);
       setSaveStatus('saved');
@@ -623,7 +636,9 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       }
 
       const savedDocId = await onSave(finalData);
-      setFormData(prev => ({ ...prev, sellerSignatureUrl, sellerCustomerId }));
+      const settled = { ...formData, sellerSignatureUrl, sellerCustomerId };
+      savedSnapshot.current = JSON.stringify(settled);
+      setFormData(settled);
       clearDraft(draftKey);
       if (savedDocId) setLocalId(savedDocId);
       await rememberOptions({
