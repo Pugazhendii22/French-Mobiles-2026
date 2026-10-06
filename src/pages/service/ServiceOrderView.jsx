@@ -22,9 +22,15 @@ import { describeFirebaseError } from '@/shared/firebase/firebaseError';
 import { openWhatsApp as openWhatsAppChat } from '@/shared/lib/phone';
 import { serviceOrderLabelData, syncLabelSnapshot, withLiveLabelData } from '@/features/labels/data';
 import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
+import { STATUSES, stateMetaOf } from '@/features/service/orderState';
 
-const STATUSES = ['Received', 'In Progress', 'Parts Awaiting', 'Awaiting Customer Approval', 'Returned'];
-const NON_COMPLETED_STATUSES = ['Received', 'In Progress', 'Parts Awaiting', 'Awaiting Customer Approval', 'Returned'];
+/* Everything but Completed: finishing an order goes through the pre-delivery
+   checklist, never a dropdown. Derived from the one shared list rather than
+   spelled out again - this file used to carry two identical copies, one of
+   which nothing read. */
+const NON_COMPLETED_STATUSES = STATUSES.filter(s => s !== 'Completed');
+
+const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
 const ServiceOrderView = () => {
   const { id } = useParams();
@@ -564,53 +570,109 @@ const ServiceOrderView = () => {
 
   const showStatusSelect = canChangeStatus && order?.status !== 'Completed';
 
+  /* The same three-state colour the job sheet uses, so the spine down the left
+     of this page means what it meant in the list you arrived from. */
+  const heroState = stateMetaOf(order);
+
+  const balanceDue = Math.max(
+    0,
+    (Number(order?.estimatedPrice) || 0) - (Number(order?.advancePaid) || 0),
+  );
+
+  /* Named once. Each was spelled out inline at its own button, slightly
+     differently each time. */
+  const canComplete = (isAdmin || order?.technicianUid === currentUser?.uid) && !isCompleted;
+  const canEditOrder = isAdmin || (order?.technicianUid === currentUser?.uid && !isCompletedBill);
+
   try {
     return (
       <Layout title="Service Order" pageType="detail" backTo="/service">
         <div className="max-w-3xl mx-auto space-y-3">
 
-          {/* ── HERO ── */}
-          <div className={`bg-white rounded-2xl shadow-sm border-l-4 p-4 ${
-            order?.status === 'Completed' ? 'border-green-500' : 'border-[#002395]'
-          }`}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-bold text-[#002395] font-mono truncate">{order?.orderNumber}</p>
-                <h2 className="text-lg font-bold text-[#0f172a] mt-0.5 leading-tight">{order?.customerName}</h2>
-                {order?.customerPhone && (
-                  <a href={`tel:${order.customerPhone}`} className="inline-flex items-center gap-1.5 text-green-600 font-semibold text-sm mt-1">
-                    <i className="fas fa-phone text-xs"></i>{order.customerPhone}
-                  </a>
-                )}
-                {order?.alternatePhone && (
-                  <a href={`tel:${order.alternatePhone}`} className="flex items-center gap-1.5 text-green-600 font-semibold text-sm mt-0.5">
-                    <i className="fas fa-phone text-xs"></i>{order.alternatePhone}
-                  </a>
-                )}
+          {/* ── HERO ──
+              What someone needs before they do anything: who it is, what came
+              in, whether it is late, and what the money is. Then one thing to
+              do, and quieter ways to do the rest.
+
+              This was up to nine filled buttons in eight colours - blue, green,
+              blue-tint, amber, red, grey, emerald, yellow, purple - stacked
+              under the status. Every one of them shouted equally, so none of
+              them read as the thing you came here for. They are all still here;
+              only one of them is loud. */}
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+
+            <div className="relative p-4">
+              <span
+                aria-hidden="true"
+                className="absolute left-0 top-0 bottom-0 w-[3px]"
+                style={{ background: heroState.spine }}
+              />
+
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] font-bold text-[#002395] font-mono">{order?.orderNumber}</span>
+                    {isOverdue && (
+                      <span className="text-[10px] font-bold text-[#ED2939]">
+                        Overdue{expectedCompletionDate ? ` · due ${expectedCompletionDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}
+                      </span>
+                    )}
+                    {isCompleted && (
+                      <span className="text-[10px] font-semibold text-[#94a3b8]">Finished</span>
+                    )}
+                  </div>
+
+                  <h2 className="text-lg font-bold text-[#0f172a] mt-0.5 leading-tight truncate">{order?.customerName}</h2>
+
+                  <div className="flex items-center gap-3 flex-wrap mt-1">
+                    {order?.customerPhone && (
+                      <a href={`tel:${order.customerPhone}`} className="inline-flex items-center gap-1.5 text-green-600 font-semibold text-sm">
+                        <i className="fas fa-phone text-xs" aria-hidden="true"></i>{order.customerPhone}
+                      </a>
+                    )}
+                    {order?.alternatePhone && (
+                      <a href={`tel:${order.alternatePhone}`} className="inline-flex items-center gap-1.5 text-green-600 font-semibold text-sm">
+                        <i className="fas fa-phone text-xs" aria-hidden="true"></i>{order.alternatePhone}
+                      </a>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="text-right shrink-0">
-                <p className="text-xl font-bold text-[#002395] leading-tight">₹{order?.estimatedPrice}</p>
-                {order?.advancePaid > 0 && (
-                  <p className="text-[11px] text-green-600 font-semibold mt-0.5">Advance ₹{order?.advancePaid}</p>
+
+              <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+                <Chip className="bg-gray-100 text-gray-700">{order?.brand} {order?.model}</Chip>
+                {order?.colour && <Chip>{order?.colour}</Chip>}
+                {labelEntry && (
+                  <Chip className="bg-[#002395]/10 text-[#002395]"><i className="fas fa-tag mr-1" aria-hidden="true"></i>#{labelEntry.labelNumber}</Chip>
                 )}
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-              <Chip className="bg-gray-100 text-gray-700">{order?.brand} {order?.model}</Chip>
-              {order?.colour && <Chip>{order?.colour}</Chip>}
-              {labelEntry && (
-                <Chip className="bg-[#002395]/10 text-[#002395]"><i className="fas fa-tag mr-1"></i>#{labelEntry.labelNumber}</Chip>
-              )}
+            {/* The three figures the customer asks about, in the order they ask:
+                what it costs, what they have already handed over, what is left. */}
+            <div className="flex items-stretch border-t border-[#f1f4f9] divide-x divide-[#f1f4f9] px-4">
+              <div className="flex-1 py-3">
+                <p className="text-[11px] text-[#64748b]">Estimate</p>
+                <p className="text-[15px] font-bold tabular-nums text-[#0f172a] mt-0.5">{money(order?.estimatedPrice)}</p>
+              </div>
+              <div className="flex-1 py-3 pl-3">
+                <p className="text-[11px] text-[#64748b]">Advance paid</p>
+                <p className="text-[15px] font-bold tabular-nums text-green-700 mt-0.5">{money(order?.advancePaid)}</p>
+              </div>
+              <div className="flex-1 py-3 pl-3">
+                <p className="text-[11px] text-[#64748b]">Balance</p>
+                <p className="text-[15px] font-bold tabular-nums text-[#0f172a] mt-0.5">{money(balanceDue)}</p>
+              </div>
             </div>
 
             {/* Status is the thing that changes most, so it gets its own control */}
-            <div className="mt-3">
+            <div className="px-4 py-3 border-t border-[#f1f4f9]">
               {showStatusSelect ? (
                 <select
                   value={order?.status}
                   onChange={handleStatusChange}
                   disabled={updatingStatus}
+                  aria-label="Order status"
                   className={`w-full text-sm px-3 py-3 rounded-xl border-0 font-bold focus:outline-none ${statusColors}`}
                 >
                   {filteredStatusOptions.map(status => (
@@ -624,45 +686,41 @@ const ServiceOrderView = () => {
               )}
             </div>
 
-            {/* ── ACTIONS, grouped by importance instead of one chip wall ── */}
-            <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
-              {(userRole?.toLowerCase() === 'admin' || order?.technicianUid === currentUser?.uid) && order?.status !== 'Completed' && (
+            <div className="px-4 py-3 border-t border-[#f1f4f9]">
+              {/* The one thing this page is for, which depends on where the
+                  order has got to: finish the repair, then bill it. */}
+              {canComplete && (
                 <button
                   onClick={() => setShowCompleteModal(true)}
                   disabled={updatingStatus}
-                  className="w-full bg-[#002395] text-white py-3 rounded-xl text-sm font-bold disabled:opacity-50"
+                  className="w-full bg-[#002395] text-white py-3 rounded-xl text-[15px] font-bold disabled:opacity-50"
                 >
-                  <i className="fas fa-check-circle mr-2"></i>Complete Service
+                  Complete this service
                 </button>
               )}
 
-              {order?.status === 'Completed' && !order?.billCreated && (
+              {isCompleted && !order?.billCreated && (
                 <button
                   onClick={handleCreateBill}
-                  className="w-full bg-green-600 text-white py-3 rounded-xl text-sm font-bold"
+                  className="w-full bg-[#16a34a] text-white py-3 rounded-xl text-[15px] font-bold"
                 >
-                  <i className="fas fa-receipt mr-2"></i>Create Bill
+                  Create the bill
                 </button>
               )}
 
-              <div className="flex gap-2">
-                {(isAdmin || (order?.technicianUid === currentUser?.uid && !isCompletedBill)) && (
-                  <button
-                    onClick={() => setShowEdit(true)}
-                    className="flex-1 bg-[#002395]/10 text-[#002395] py-2.5 rounded-xl text-xs font-bold"
-                  >
-                    <i className="fas fa-edit mr-1.5"></i>Edit
+              {/* Everything else, in one quiet block. Nothing here competes
+                  with the button above, and nothing has been taken away. */}
+              <div className={`flex flex-wrap items-center justify-center gap-x-4 gap-y-1 ${(canComplete || (isCompleted && !order?.billCreated)) ? 'mt-3' : ''}`}>
+                {canEditOrder && (
+                  <button onClick={() => setShowEdit(true)} className="text-[13px] font-semibold text-[#002395] py-1.5">
+                    Edit details
                   </button>
                 )}
-                <button
-                  onClick={handlePrintJobCard}
-                  className="flex-1 bg-amber-50 text-amber-700 py-2.5 rounded-xl text-xs font-bold"
-                >
-                  <i className="fas fa-file-alt mr-1.5"></i>Job Card
-                </button>
-              </div>
 
-              <div className="flex gap-2">
+                <button onClick={handlePrintJobCard} className="text-[13px] font-semibold text-[#002395] py-1.5">
+                  Print job card
+                </button>
+
                 {labelEntry ? (
                   <button
                     onClick={() => {
@@ -670,59 +728,51 @@ const ServiceOrderView = () => {
                       setLabelHTML(html)
                       setShowPrinter(true)
                     }}
-                    className="flex-1 bg-[#ED2939]/10 text-[#ED2939] py-2.5 rounded-xl text-xs font-bold"
+                    className="text-[13px] font-semibold text-[#002395] py-1.5"
                   >
-                    <i className="fas fa-print mr-1.5"></i>Print #{labelEntry.labelNumber}
+                    Print label #{labelEntry.labelNumber}
                   </button>
                 ) : (
-                  <button
-                    onClick={openLabelDialog}
-                    className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-xl text-xs font-bold"
-                  >
-                    <i className="fas fa-tag mr-1.5"></i>Assign Label
+                  <button onClick={openLabelDialog} className="text-[13px] font-semibold text-[#002395] py-1.5">
+                    Assign a label
                   </button>
                 )}
-                {order?.status === 'Completed' && (
+
+                {isCompleted && (
+                  <button onClick={handlePrintFinalBill} className="text-[13px] font-semibold text-[#002395] py-1.5">
+                    Print final bill
+                  </button>
+                )}
+
+                {isCompleted && (
+                  <button onClick={openWhatsApp} className="text-[13px] font-semibold text-[#16a34a] py-1.5">
+                    WhatsApp the customer
+                  </button>
+                )}
+
+                {isCompleted && !order?.ratingToken && (
                   <button
-                    onClick={handlePrintFinalBill}
-                    className="flex-1 bg-emerald-50 text-emerald-700 py-2.5 rounded-xl text-xs font-bold"
+                    onClick={handleSendRating}
+                    disabled={generatingRating}
+                    className="text-[13px] font-semibold text-[#002395] py-1.5 disabled:opacity-50"
                   >
-                    <i className="fas fa-file-invoice mr-1.5"></i>Final Bill
+                    {generatingRating ? 'Preparing…' : 'Ask for a rating'}
+                  </button>
+                )}
+
+                {isCompleted && order?.billCreated && order?.linkedSaleId && (
+                  <button
+                    onClick={() => navigate(`/sales/${order?.linkedSaleId}`)}
+                    className="text-[13px] font-semibold text-[#002395] py-1.5"
+                  >
+                    View the bill
                   </button>
                 )}
               </div>
 
-              {order?.status === 'Completed' && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={openWhatsApp}
-                    className="flex-1 bg-green-50 text-green-700 py-2.5 rounded-xl text-xs font-bold"
-                  >
-                    <i className="fab fa-whatsapp mr-1.5"></i>WhatsApp
-                  </button>
-                  {!order?.ratingToken && (
-                    <button
-                      onClick={handleSendRating}
-                      disabled={generatingRating}
-                      className="flex-1 bg-yellow-50 text-yellow-700 py-2.5 rounded-xl text-xs font-bold disabled:opacity-50"
-                    >
-                      <i className="fas fa-star mr-1.5"></i>Rating
-                    </button>
-                  )}
-                  {order?.billCreated && order?.linkedSaleId && (
-                    <button
-                      onClick={() => navigate(`/sales/${order?.linkedSaleId}`)}
-                      className="flex-1 bg-purple-50 text-purple-700 py-2.5 rounded-xl text-xs font-bold"
-                    >
-                      <i className="fas fa-receipt mr-1.5"></i>View Bill
-                    </button>
-                  )}
-                </div>
-              )}
-
               {isCompletedBill && !isAdmin && (
-                <p className="flex items-center justify-center gap-1.5 bg-gray-100 text-gray-500 py-2.5 rounded-xl text-xs font-semibold">
-                  <i className="fas fa-lock"></i> Bill locked - admin only
+                <p className="text-center text-[12px] text-[#94a3b8] font-semibold mt-2.5">
+                  <i className="fas fa-lock mr-1.5" aria-hidden="true"></i>Billed - only an admin can change this now
                 </p>
               )}
             </div>
