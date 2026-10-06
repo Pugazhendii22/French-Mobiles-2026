@@ -1,24 +1,34 @@
-import { useMemo } from 'react';
-import { DOT_IDS, nextPattern, isValidPattern } from './patternSequence';
+import { useMemo, useRef } from 'react';
+import { DOT_IDS, nextPattern, appendDot, dotAtPoint, isValidPattern } from './patternSequence';
 
 /* ─────────────────────────────────────────────
    UNLOCK PATTERN
 
-   Tapped, not drawn. This used to be a drag: press on a dot, pull across the
-   others, release - the gesture a phone's own lock screen uses. It is the wrong
-   gesture here. The field sits two thirds of the way down a bottom sheet, where
-   a drag is already how you scroll the form and how you pull the sheet shut, so
-   drawing a pattern fought both: the block had touch-action none, which stopped
-   the form scrolling whenever a thumb landed on it, and a downward stroke could
-   close the sheet instead of drawing a line.
+   Drawn, the way a phone's own lock screen is drawn: press on the first dot,
+   pull the line through the rest, lift. That is the gesture staff already know
+   from handing the phone back to its owner, and it is how the customer describes
+   it across the counter.
 
-   Tapping has none of that. Each dot is its own button, so the browser decides
-   what is a tap and what is a scroll, the sequence is visible as numbers, and
-   there is a way back from a wrong dot that is not "clear it and start again":
-   tap a dot again to drop it, or tap an earlier one to rewind to it.
+   Drawing was taken out once because it fought the sheet it sits in. Two things
+   went wrong, and both are dealt with here rather than by giving up the gesture:
 
-   It also means this works from a keyboard and reads correctly aloud, which the
-   SVG and its pointer maths never did.
+   The form stopped scrolling. touch-action: none was on the whole block, so a
+   thumb landing anywhere near the pattern - including the space around it - was
+   held by the pad instead of scrolling the form. Here it is on the dots alone.
+   They are 64px inside a 96px cell, so a third of the pad is gap, and a thumb
+   that lands in the gap scrolls the form exactly as it did before.
+
+   A downward stroke closed the sheet. The stroke reached the sheet's own
+   handlers and read as "pull down to dismiss", so drawing a line towards the
+   bottom row threw the form away. The dots stop touch events going further.
+   Touch events stay aimed at the element the touch began on, so a stroke that
+   starts on a dot is contained for its whole length, however far it wanders.
+
+   Tapping still works, because it is the better way to fix one wrong dot: tap a
+   dot again to drop it, or tap an earlier one to rewind to it. A drag starts a
+   new pattern; a tap adjusts the one that is there. The dots are still real
+   buttons, so the keyboard reaches them and a screen reader reads the sequence
+   out - neither of which the old SVG and its pointer maths managed.
 ────────────────────────────────────────────── */
 
 const DOT_GEOMETRY = DOT_IDS.map((id, index) => ({
@@ -41,10 +51,75 @@ const PatternLock = ({ value = [], onChange, readOnly = false }) => {
      works with a real pattern. */
   const pattern = useMemo(() => (isValidPattern(value) ? value : []), [value]);
 
+  const padRef = useRef(null);
+  /* The stroke in progress. Held in a ref because a pointermove arrives before
+     React has re-rendered with the dot the one before it added, so reading the
+     prop here would keep rediscovering the same dot. */
+  const stroke = useRef(null);
+
   const tap = (id) => {
     if (readOnly) return;
     onChange?.(nextPattern(pattern, id));
   };
+
+  const dotUnder = (e) => dotAtPoint(e.clientX, e.clientY, padRef.current?.getBoundingClientRect());
+
+  const onPointerDown = (e) => {
+    if (readOnly) return;
+    const id = dotUnder(e);
+    /* Started in the gap, so this gesture is not ours: leave it alone and the
+       form scrolls. */
+    if (!id) return;
+
+    /* Nothing is committed yet. Until a second dot is reached this could still
+       be a tap, which means something different - see the note above. */
+    stroke.current = { from: id, drawing: false };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+
+  const onPointerMove = (e) => {
+    const current = stroke.current;
+    if (!current) return;
+    const id = dotUnder(e);
+    if (!id) return;
+
+    if (!current.drawing) {
+      if (id === current.from) return;      // still on the dot it started from
+      // A second dot: this is a stroke, and a stroke starts a new pattern.
+      stroke.current = { ...current, drawing: true, dots: [current.from, id] };
+      onChange?.([current.from, id]);
+      return;
+    }
+
+    const next = appendDot(current.dots, id);
+    if (next === current.dots) return;     // a dot already in the line
+    stroke.current = { ...current, dots: next };
+    onChange?.(next);
+  };
+
+  const onPointerUp = (e) => {
+    const current = stroke.current;
+    stroke.current = null;
+    /* Asked before released: releasePointerCapture throws when the pointer is
+       not one this element holds, and a throw inside the handler would leave the
+       gesture half finished. */
+    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    if (!current || current.drawing) return;
+
+    /* Never reached a second dot. Treat it as a tap, but only if the finger came
+       up on the dot it went down on - the way a button behaves, so sliding off
+       to change your mind cancels instead of committing. */
+    if (dotUnder(e) === current.from) tap(current.from);
+  };
+
+  const onPointerCancel = () => { stroke.current = null; };
+
+  /* Keeps the stroke off the sheet underneath, which would otherwise read a
+     downward line as a pull-to-dismiss. Nothing to contain when the pattern is
+     only being shown: a page displaying one still has to scroll. */
+  const contain = readOnly ? undefined : (e) => e.stopPropagation();
 
   const positionOf = (id) => pattern.indexOf(id);
   const points = pattern.map(id => DOT_GEOMETRY[id - 1]).filter(Boolean);
@@ -52,13 +127,23 @@ const PatternLock = ({ value = [], onChange, readOnly = false }) => {
   return (
     <div className="w-full select-none">
       <p className="text-[13px] text-[#64748b] text-center mb-3">
-        {pattern.length === 0
-          ? 'Tap the dots in the order the customer draws them'
-          : `${pattern.length} ${pattern.length === 1 ? 'dot' : 'dots'} · tap a dot again to change it`}
+        {readOnly
+          ? (pattern.length ? `${pattern.length} dots` : 'No pattern recorded')
+          : pattern.length === 0
+            ? 'Draw the pattern with your finger, or tap the dots in order'
+            : `${pattern.length} ${pattern.length === 1 ? 'dot' : 'dots'} · draw again to replace it, or tap a dot to change it`}
       </p>
 
       <div className="bg-[#f0f4ff] rounded-2xl p-4 flex justify-center">
-        <div className="relative" style={{ width: 288, height: 288 }}>
+        <div
+          ref={padRef}
+          className="relative"
+          style={{ width: 288, height: 288 }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerCancel}
+        >
           {/* The lines are decoration over the buttons, never a tap target. */}
           <svg
             viewBox="0 0 300 300"
@@ -92,16 +177,33 @@ const PatternLock = ({ value = [], onChange, readOnly = false }) => {
                 <div key={id} className="flex items-center justify-center">
                   <button
                     type="button"
-                    onClick={() => tap(id)}
                     disabled={readOnly}
+                    /* The keyboard route. Pointers are handled on the pad above,
+                       so preventDefault here stops the browser also firing a
+                       click for the key and applying the tap twice. */
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tap(id); }
+                    }}
+                    onTouchStart={contain}
+                    onTouchMove={contain}
+                    onTouchEnd={contain}
+                    onTouchCancel={contain}
                     /* 64px of target inside a 96px cell: a thumb cannot reach
                        two of them at once, which is what went wrong on the
-                       pre-delivery checklist next door. */
+                       pre-delivery checklist next door. The gap it leaves is
+                       what the form scrolls by.
+
+                       touchAction none on the dot and not on the pad: a stroke
+                       that starts on a dot must not also scroll, while a thumb
+                       landing in the gap must. Only while there is a stroke to
+                       protect - on a page that just shows the pattern, holding
+                       the scroll over nine dots would be nine dead spots. */
                     style={{
                       width: 64, height: 64, borderRadius: '50%',
                       backgroundColor: on ? colour : '#ffffff',
                       border: `2px solid ${on ? colour : '#D1D5DB'}`,
                       color: on ? '#ffffff' : '#94a3b8',
+                      touchAction: readOnly ? undefined : 'none',
                     }}
                     className="relative flex items-center justify-center text-[17px] font-bold shadow-sm transition-colors disabled:cursor-default"
                     aria-pressed={on}

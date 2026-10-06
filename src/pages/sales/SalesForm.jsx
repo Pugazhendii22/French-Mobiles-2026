@@ -7,7 +7,7 @@ import BarcodeScannerModal from '@/shared/components/BarcodeScannerModal';
 import { lookupLabel } from '@/features/labels/data';
 import { describeFirebaseError } from '@/shared/firebase/firebaseError';
 import { Section, FieldError } from '@/shared/ui/ui';
-import { inputClass, labelClass, errorInput } from '@/shared/ui/uiTokens';
+import { inputClass, labelClass, errorInput, money } from '@/shared/ui/uiTokens';
 import { DIRECT_PAYMENT_METHODS, FINANCE_PROVIDERS, isFinanceMethod } from '../../utils/paymentMethods';
 import { loadCustomers } from '../../utils/customerCache';
 import { loadCollection } from '@/shared/data/collectionCache';
@@ -339,7 +339,7 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
       }
       const newItem = buildSecondHandItem(sh);
       setFormData(prev => ({ ...prev, items: [...prev.items, newItem] }));
-      const message = `Added ${newItem.name} - ₹${newItem.unitPrice}`;
+      const message = `Added ${newItem.name} - ${money(newItem.unitPrice)}`;
       setScanNotice(message);
       return { ok: true, message };
     }
@@ -372,7 +372,7 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
 
     const newItem = buildProductItem(prod);
     setFormData(prev => ({ ...prev, items: [...prev.items, newItem] }));
-    const message = `Added ${newItem.name} - ₹${newItem.unitPrice}`;
+    const message = `Added ${newItem.name} - ${money(newItem.unitPrice)}`;
     setScanNotice(message);
     return { ok: true, message };
   };
@@ -456,7 +456,11 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
 
 
       {/* ── CUSTOMER ── */}
-      <Section icon="fa-user" title="Customer" hint="Who is buying">
+      <Section
+        icon="fa-user"
+        title="Customer"
+        hint="Who is buying. Start typing a name or number and anyone the shop has served before will come up, so nobody gets added twice."
+      >
         <div className="space-y-3">
           <div ref={customerNameRef}>
             <CustomerAutocomplete
@@ -471,6 +475,7 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
               onPhoneChange={val => setFormData({...formData, customerPhone: val, customerId: ''})}
               onAlternatePhoneChange={val => setFormData({...formData, alternatePhone: val})}
               onSelectCustomer={handleCustomerSelect}
+              nameError={fieldErrors.customerName}
             />
             <FieldError message={fieldErrors.customerName} />
           </div>
@@ -498,7 +503,11 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
       </Section>
 
       {/* ── ITEMS ── */}
-      <Section icon="fa-box" title="Items" hint="Scan a label or add by hand">
+      <Section
+        icon="fa-box"
+        title="Items"
+        hint="What is being sold. Scan the label on a device or add a line by hand - stock comes down and a second-hand handset is marked sold only when the sale is completed."
+      >
         <button
           type="button"
           onClick={() => { setScanNotice(''); setScannerOpen(true); }}
@@ -536,7 +545,8 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
         {formData.items.length === 0 ? (
           <div ref={itemsRef} className="text-center py-8 bg-gray-50 rounded-xl mt-3">
             <i className="fas fa-box-open text-3xl text-gray-200 mb-2 block"></i>
-            <p className="text-gray-400 text-sm">No items yet</p>
+            <p className="text-[#64748b] text-sm font-semibold">Nothing on this bill yet</p>
+            <p className="text-[#64748b] text-xs mt-1">Scan a label, or add a line by hand above. A sale needs at least one.</p>
             <FieldError message={fieldErrors.items} />
           </div>
         ) : (
@@ -589,7 +599,7 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
                       <option value="">Select Product</option>
                       {products.map(p => (
                         <option key={p.id} value={p.id} disabled={Number(p.stock) <= 0}>
-                          {p.name} (Stock: {p.stock || 0}) - ₹{p.salePrice || p.price || 0}
+                          {p.name} (Stock: {p.stock || 0}) - {money(p.salePrice || p.price || 0)}
                           {Number(p.stock) <= 0 ? ' - Out of Stock' : ''}
                         </option>
                       ))}
@@ -598,12 +608,12 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
                   {item.type === 'Second-hand' && item.repairCost > 0 && (
                     <p className="text-[11px] text-orange-600">
                       <i className="fas fa-wrench mr-1"></i>
-                      Includes repair cost ₹{item.repairCost}
+                      Includes repair cost {money(item.repairCost)}
                     </p>
                   )}
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="block text-[11px] text-gray-400 mb-1">Qty</label>
+                      <label className="block text-[11px] text-[#64748b] mb-1">Qty</label>
                       <input
                         type="number"
                         inputMode="numeric"
@@ -617,7 +627,7 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] text-gray-400 mb-1">Price</label>
+                      <label className="block text-[11px] text-[#64748b] mb-1">Price</label>
                       <input
                         type="number"
                         inputMode="numeric"
@@ -630,7 +640,7 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] text-gray-400 mb-1">Total</label>
+                      <label className="block text-[11px] text-[#64748b] mb-1">Total</label>
                       <input
                         type="number"
                         inputMode="numeric"
@@ -649,7 +659,11 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
       </Section>
 
       {/* ── PAYMENT ── */}
-      <Section icon="fa-indian-rupee-sign" title="Payment">
+      <Section
+        icon="fa-indian-rupee-sign"
+        title="Payment"
+        hint="What the customer is handing over now. Taking less than the total leaves a balance on the bill, and only an admin can collect that later from the sale page."
+      >
         <div className="space-y-3">
           <div>
             <label className={labelClass}>Payment Method</label>
@@ -741,7 +755,7 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
                   <input
                     type="text"
                     readOnly
-                    value={`₹${financedAmount}`}
+                    value={money(financedAmount)}
                     className={`${inputClass} bg-white font-bold text-indigo-700`}
                   />
                 </div>
@@ -764,7 +778,7 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
 
               <p className="text-[11px] text-indigo-700">
                 <i className="fas fa-circle-info mr-1"></i>
-                Recorded as fully paid - the customer owes nothing. ₹{financedAmount} is due to
+                Recorded as fully paid - the customer owes nothing. {money(financedAmount)} is due to
                 the shop from {formData.paymentMethod}.
               </p>
             </div>
@@ -772,7 +786,7 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
 
           {!financed && (
             <div ref={amountPaidRef}>
-              <label className={labelClass}>Amount Paid</label>
+              <label className={labelClass}>Amount paid <span className="text-[#ED2939]">*</span></label>
               <input
                 type="number"
                 inputMode="numeric"
@@ -821,10 +835,10 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
           {customerWalletBalance > 0 && (
             <div className="bg-[#002395]/5 border border-[#002395]/20 rounded-xl p-3">
               <p className="text-sm font-bold text-[#002395] mb-2">
-                <i className="fas fa-wallet mr-2"></i>Wallet Balance ₹{customerWalletBalance}
+                <i className="fas fa-wallet mr-2"></i>Wallet Balance {money(customerWalletBalance)}
               </p>
               <label className="block text-[11px] text-gray-500 mb-1">
-                Use from wallet (max ₹{Math.min(customerWalletBalance, totalAmount)})
+                Use from wallet (max {money(Math.min(customerWalletBalance, totalAmount))})
               </label>
               <div className="flex gap-2">
                 <input
@@ -875,39 +889,43 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
       </Section>
 
       {/* ── TOTALS ── */}
-      <Section icon="fa-receipt" title="Bill Summary">
+      <Section
+        icon="fa-receipt"
+        title="Bill Summary"
+        hint="What it all comes to. This is the figure on the Complete Sale button and the one printed on the customer's invoice, so check it against what they are paying."
+      >
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Subtotal</span>
-            <span className="font-medium">₹{subtotal}</span>
+            <span className="font-medium">{money(subtotal)}</span>
           </div>
           {Number(formData.discount) > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-green-600">
                 Discount {discountCategory ? `(${discountCategory === 'family' ? 'Family' : discountCategory === 'friends' ? 'Friends' : 'Regular'})` : ''}
               </span>
-              <span className="font-medium text-green-600">- ₹{formData.discount}</span>
+              <span className="font-medium text-green-600">- {money(formData.discount)}</span>
             </div>
           )}
           {walletUsed > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-[#002395]"><i className="fas fa-wallet mr-1"></i>Wallet Used</span>
-              <span className="font-medium text-[#002395]">- ₹{walletUsed}</span>
+              <span className="font-medium text-[#002395]">- {money(walletUsed)}</span>
             </div>
           )}
           <div className="flex justify-between text-lg font-bold border-t border-gray-200 pt-2">
             <span>Final Amount</span>
-            <span className="text-[#002395]">₹{finalAmount}</span>
+            <span className="text-[#002395]">{money(finalAmount)}</span>
           </div>
           {financed ? (
             <>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Down Payment</span>
-                <span className="font-medium text-green-600">₹{downPayment}</span>
+                <span className="font-medium text-green-600">{money(downPayment)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-indigo-700">{formData.paymentMethod}</span>
-                <span className="font-medium text-indigo-700">₹{financedAmount}</span>
+                <span className="font-medium text-indigo-700">{money(financedAmount)}</span>
               </div>
               <div className="flex justify-between text-sm font-semibold">
                 <span>Customer Balance</span>
@@ -918,20 +936,20 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
             <>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Amount Paid</span>
-                <span className="font-medium text-green-600">₹{Number(formData.amountPaid) || 0}</span>
+                <span className="font-medium text-green-600">{money(Number(formData.amountPaid) || 0)}</span>
               </div>
               <div className="flex justify-between text-sm font-semibold">
                 <span>Balance Due</span>
                 <span className={balanceDue > 0 ? 'text-[#ED2939]' : 'text-green-600'}>
-                  {balanceDue > 0 ? `₹${balanceDue}` : 'Fully Paid ✓'}
+                  {balanceDue > 0 ? `${money(balanceDue)}` : 'Fully Paid ✓'}
                 </span>
               </div>
             </>
           )}
           <div className="flex justify-between text-xs border-t border-gray-100 pt-2">
-            <span className="text-gray-400">Est. Profit</span>
+            <span className="text-[#64748b]">Est. Profit</span>
             <span className={`font-semibold ${finalProfit >= 0 ? 'text-green-600' : 'text-[#ED2939]'}`}>
-              ₹{finalProfit}
+              {money(finalProfit)}
             </span>
           </div>
         </div>
@@ -952,7 +970,7 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
           disabled={submitting}
           className="w-full bg-[#002395] text-white rounded-xl py-3.5 text-sm font-bold disabled:opacity-50"
         >
-          {submitting ? 'Processing...' : `Complete Sale · ₹${finalAmount}`}
+          {submitting ? 'Processing...' : `Complete Sale · ${money(finalAmount)}`}
         </button>
         <button
           type="button"

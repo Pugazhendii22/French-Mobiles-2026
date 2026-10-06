@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '@/shared/firebase/firebase';
 import ServiceOrderForm from './ServiceOrderForm';
-import PatternLock from '@/shared/components/PatternLock';
 import { getLabelNumber } from '@/features/labels/data';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
@@ -15,6 +14,7 @@ import { generateServiceFinalBill } from '../../utils/generateServiceFinalBill';
 import PrinterSelector from '@/features/labels/printing/PrinterSelector';
 import ImageModal from '@/shared/ui/ImageModal';
 import Layout from '@/shared/ui/Layout';
+import { money } from '@/shared/ui/uiTokens';
 import { Section, InfoRow, InfoGrid, Chip } from '@/shared/ui/ui';
 import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
 import { imageThumb } from '@/shared/lib/imageUrl';
@@ -22,16 +22,9 @@ import { describeFirebaseError } from '@/shared/firebase/firebaseError';
 import { openWhatsApp as openWhatsAppChat } from '@/shared/lib/phone';
 import { serviceOrderLabelData, syncLabelSnapshot, withLiveLabelData } from '@/features/labels/data';
 import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
-import { STATUSES, stateMetaOf } from '@/features/service/orderState';
+import { isOverdue, stateMetaOf, statusOptionsFor } from '@/features/service/orderState';
 import { checklistEntries, blankChecklist, allChecked } from '@/features/service/checklist';
 
-/* Everything but Completed: finishing an order goes through the pre-delivery
-   checklist, never a dropdown. Derived from the one shared list rather than
-   spelled out again - this file used to carry two identical copies, one of
-   which nothing read. */
-const NON_COMPLETED_STATUSES = STATUSES.filter(s => s !== 'Completed');
-
-const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
 const ServiceOrderView = () => {
   const { id } = useParams();
@@ -60,10 +53,6 @@ const ServiceOrderView = () => {
   const [assigningLabel, setAssigningLabel] = useState(false);
   const [newSaleModalOpen, setNewSaleModalOpen] = useState(false);
   const [salePrefillData, setSalePrefillData] = useState(null);
-  const [staffOptions, setStaffOptions] = useState([]);
-  const [editingTechnician, setEditingTechnician] = useState(false);
-  const [savingTechnician, setSavingTechnician] = useState(false);
-  const [ratingDoc, setRatingDoc] = useState(null);
   const [generatingRating, setGeneratingRating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -226,24 +215,11 @@ const ServiceOrderView = () => {
     }
   }, [id]);
 
-  const fetchStaff = useCallback(async () => {
-    try {
-      const q = query(collection(db, 'users'), where('isActive', '==', true));
-      const snap = await getDocs(q);
-      const list = [];
-      snap.forEach(doc => list.push({ uid: doc.id, ...doc.data() }));
-      setStaffOptions(list);
-    } catch (err) {
-      console.error('Error fetching active staff:', err);
-    }
-  }, []);
-
   useEffect(() => {
     const loadData = async () => {
       try {
         await fetchOrder();
         await fetchLabel();
-        if (userRole?.toLowerCase() === 'admin') await fetchStaff();
       } catch (err) {
         console.error(err);
       } finally {
@@ -252,43 +228,8 @@ const ServiceOrderView = () => {
     };
 
     loadData();
-  }, [fetchOrder, fetchLabel, fetchStaff, userRole]);
+  }, [fetchOrder, fetchLabel]);
 
-  useEffect(() => {
-    const fetchRating = async () => {
-      if (order?.ratingToken) {
-        try {
-          const ratingSnap = await getDoc(doc(db, 'ratings', order.ratingToken));
-          if (ratingSnap.exists()) {
-            setRatingDoc({ id: ratingSnap.id, ...ratingSnap.data() });
-          }
-        } catch (err) {
-          console.error("Error fetching rating:", err);
-        }
-      }
-    };
-    fetchRating();
-  }, [order?.ratingToken]);
-
-  const formatDateTime = (value) => {
-    if (!value) return '-';
-    const date = value?.toDate ? value.toDate() : new Date(value);
-    if (Number.isNaN(date.getTime())) return '-';
-    return date.toLocaleString();
-  };
-
-  const timeDeltaLabel = (date) => {
-    if (!date) return '';
-    const diff = date.getTime() - new Date().getTime();
-    const absMs = Math.abs(diff);
-    const days = Math.floor(absMs / 86400000);
-    const hours = Math.floor((absMs % 86400000) / 3600000);
-    const minutes = Math.floor((absMs % 3600000) / 60000);
-    if (days > 0) return `${days} day${days > 1 ? 's' : ''}`;
-    if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''}`;
-    if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''}`;
-    return 'less than a minute';
-  };
 
   const handleUpdate = async (data) => {
     if ((order?.status === 'Completed' || order?.billCreated) && userRole?.toLowerCase() !== 'admin') {
@@ -308,8 +249,18 @@ const ServiceOrderView = () => {
 
   const handleStatusChange = async (e) => {
     const newStatus = e.target.value;
-    if ((order?.status === 'Completed' || order?.billCreated) && userRole?.toLowerCase() !== 'admin') {
+    const admin = userRole?.toLowerCase() === 'admin';
+    if ((order?.status === 'Completed' || order?.billCreated) && !admin) {
       alert('Only admin can make changes to completed bills.');
+      return;
+    }
+    /* The same rule canChangeStatus uses to decide whether to draw the select at
+       all. It was only in the markup, so the two could drift - and this page is
+       reachable by link and by scanning a label, not just from the list that
+       filters to your own orders. The list's quick-change has carried this check
+       all along; this one did not. */
+    if (!admin && order?.technicianUid !== currentUser?.uid) {
+      alert('You can only change the status of orders assigned to you.');
       return;
     }
     setUpdatingStatus(true);
@@ -318,49 +269,6 @@ const ServiceOrderView = () => {
       await updateDoc(doc(db, 'service_orders', id), updatePayload);
       setOrder(prev => ({ ...prev, ...updatePayload }));
     } catch (err) { console.error(err); } finally { setUpdatingStatus(false); }
-  };
-
-  const handleCompleteOrder = async () => {
-    if (order?.status === 'Completed') return;
-    setUpdatingStatus(true);
-    try {
-      const updatePayload = {
-        status: 'Completed',
-        updatedAt: new Date().toISOString(),
-        actualCompletedAt: new Date()
-      };
-      await updateDoc(doc(db, 'service_orders', id), updatePayload);
-      setOrder(prev => ({ ...prev, ...updatePayload }));
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setUpdatingStatus(false);
-    }
-  };
-
-  const handleTechnicianChange = async (uid) => {
-    if (!uid) return;
-    if ((order?.status === 'Completed' || order?.billCreated) && userRole?.toLowerCase() !== 'admin') {
-      alert('Only admin can change technician on completed bills.');
-      return;
-    }
-    setSavingTechnician(true);
-    try {
-      const selected = staffOptions.find(s => s.uid === uid);
-      const updatedData = {
-        technicianUid: uid,
-        technicianName: selected?.name || selected?.email || '',
-        updatedAt: new Date().toISOString()
-      };
-      await updateDoc(doc(db, 'service_orders', id), updatedData);
-      setOrder(prev => ({ ...prev, ...updatedData }));
-      setEditingTechnician(false);
-    } catch (err) {
-      console.error(err);
-      alert('Unable to update technician.');
-    } finally {
-      setSavingTechnician(false);
-    }
   };
 
   const openWhatsApp = () => {
@@ -437,7 +345,6 @@ const ServiceOrderView = () => {
       await setDoc(doc(db, 'ratings', token), ratingData);
       await updateDoc(doc(db, 'service_orders', id), { ratingToken: token });
       setOrder(prev => ({ ...prev, ratingToken: token }));
-      setRatingDoc({ id: token, ...ratingData });
 
       const message = `Hi ${order.customerName}, your ${order.brand} ${order.model} service (₹${order.estimatedPrice}) is completed at French Mobiles! 🎉\n\nPlease take a moment to rate our service:\nhttps://${window.location.host}/rate/${token}\n\nThank you for choosing French Mobiles! 🙏`;
       openWhatsAppChat(order.customerPhone || order.alternatePhone, message);
@@ -543,13 +450,18 @@ const ServiceOrderView = () => {
   const isCompleted = order.status === 'Completed';
   const isCompletedBill = isCompleted || Boolean(order?.billCreated);
   const isAdmin = userRole?.toLowerCase() === 'admin';
-  const isOverdue = expectedCompletionDate && !isCompleted && expectedCompletionDate < new Date();
+  /* From orderState, not worked out again here. The local version tested
+     !isCompleted where the list tests isClosed - so a Returned order past its
+     date showed an Overdue badge on this page while the list called it Finished.
+     orderState exists to stop the two screens disagreeing: closed beats overdue,
+     because a job already handed back is not an alarm. */
+  const overdue = isOverdue(order);
   /* Both print routes (browser HTML and print-to-shop-PC) must read the order
      as it is now, not the copy stored when the label was assigned. */
   const labelEntryLive = withLiveLabelData(labelEntry, serviceOrderLabelData(order));
 
   const canChangeStatus = isAdmin || (
-    userRole === 'staff' &&
+    userRole?.toLowerCase() === 'staff' &&
     order?.technicianUid === currentUser?.uid &&
     !isCompletedBill &&
     order?.status !== 'Returned'
@@ -562,10 +474,10 @@ const ServiceOrderView = () => {
     order?.status === 'Awaiting Customer Approval' ? 'bg-purple-100 text-purple-700' :
     'bg-blue-100 text-blue-700';
 
-  const availableStatusOptions = NON_COMPLETED_STATUSES;
-  const filteredStatusOptions = userRole === 'admin'
-    ? availableStatusOptions
-    : availableStatusOptions.slice(Math.max(0, availableStatusOptions.indexOf(order?.status)));
+  /* statusOptionsFor states the rule; this used to slice STATUSES at the
+     current status's index, which read array position as a workflow. See the
+     note beside it in orderState. */
+  const filteredStatusOptions = statusOptionsFor(order?.status, { isAdmin });
 
   const showStatusSelect = canChangeStatus && order?.status !== 'Completed';
 
@@ -610,7 +522,7 @@ const ServiceOrderView = () => {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[11px] font-bold text-[#002395] font-mono">{order?.orderNumber}</span>
-                    {isOverdue && (
+                    {overdue && (
                       <span className="text-[10px] font-bold text-[#ED2939]">
                         Overdue{expectedCompletionDate ? ` · due ${expectedCompletionDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}
                       </span>
@@ -778,7 +690,12 @@ const ServiceOrderView = () => {
 
           {/* ── ISSUES ── */}
           {(order?.complaintTypes?.length > 0 || order?.complaintNature || order?.otherComplaint) && (
-            <Section icon="fa-triangle-exclamation" title="Issues Reported" tone="danger">
+            <Section
+              icon="fa-triangle-exclamation"
+              title="Issues Reported"
+              tone="danger"
+              hint="What the customer said was wrong when they handed it in. Anything you find on top of this is extra work - move the order to Awaiting Customer Approval rather than starting it."
+            >
               <div className="flex flex-wrap gap-2">
                 {order?.complaintTypes && order.complaintTypes.length > 0 ? (
                   Array.isArray(order.complaintTypes) ? order.complaintTypes.map((c, i) => (
@@ -808,13 +725,11 @@ const ServiceOrderView = () => {
           )}
 
           {/* ── TIME TRACKING ── */}
-          {(order?.receivedAt || order?.expectedCompletionAt) && (() => {
-            const overdue = order?.status !== 'Completed' && order?.expectedCompletionAt &&
-              new Date(order?.expectedCompletionAt?.toDate?.() || order.expectedCompletionAt) < new Date();
-            return (
+          {(order?.receivedAt || order?.expectedCompletionAt) && (
               <Section
                 icon="fa-clock"
                 title="Time Tracking"
+                hint="When it arrived, and when it was promised back. The promised time is what turns this order red here and in the list, so agree a new one with the customer rather than quietly running late."
                 tone={overdue ? 'danger' : 'brand'}
                 action={overdue ? <Chip className="bg-[#ED2939] text-white">Overdue</Chip> : null}
               >
@@ -835,11 +750,14 @@ const ServiceOrderView = () => {
                   )}
                 </InfoGrid>
               </Section>
-            );
-          })()}
+          )}
 
           {/* ── SERVICE DETAILS ── */}
-          <Section icon="fa-screwdriver-wrench" title="Service Details">
+          <Section
+            icon="fa-screwdriver-wrench"
+            title="Service Details"
+            hint="Who has the job, what the parts and outside work cost, and the numbers that identify this exact handset. Those costs come off the estimate, so they decide what the shop keeps."
+          >
             <InfoGrid>
               <InfoRow label="Technician" value={order?.technicianName} />
               <InfoRow label="Lock Type" value={order?.lockType && order?.lockType !== 'None' ? order?.lockType : undefined} />
@@ -999,7 +917,11 @@ const ServiceOrderView = () => {
 
           {/* ── ACCESSORIES ── */}
           {order?.accessories?.length > 0 && (
-            <Section icon="fa-plug" title="Accessories Collected">
+            <Section
+              icon="fa-plug"
+              title="Accessories Collected"
+              hint="What came in with the phone, and what has to go back with it. Check this against the bag before you hand the device over."
+            >
               <div className="flex flex-wrap gap-2">
                 {order.accessories.map((acc, i) => (
                   <span key={i} className="bg-[#002395]/10 text-[#002395] text-xs px-3 py-1.5 rounded-full font-semibold">
@@ -1012,14 +934,22 @@ const ServiceOrderView = () => {
 
           {/* ── SUGGESTIONS ── */}
           {order?.suggestions && (
-            <Section icon="fa-note-sticky" title="Notes & Suggestions">
+            <Section
+              icon="fa-note-sticky"
+              title="Notes & Suggestions"
+              hint="Printed on the customer's final bill, so write it for them to read. Left empty, the bill says &quot;Service completed successfully.&quot;"
+            >
               <p className="text-sm text-gray-600 bg-gray-50 rounded-xl p-3">{order?.suggestions}</p>
             </Section>
           )}
 
           {/* ── DEVICE IMAGE ── */}
           {order?.imageUrl && (
-            <Section icon="fa-camera" title="Device Image">
+            <Section
+              icon="fa-camera"
+              title="Device Image"
+              hint="The condition it arrived in. This is what settles it if a customer says a mark was not there when they handed the phone over."
+            >
               {showDeviceImage ? (
                 <div className="relative">
                   <img

@@ -28,3 +28,18 @@ export const gradeColor = (g) => ({
   C: 'bg-orange-100 text-orange-700',
   D: 'bg-red-100 text-red-700',
 }[g] || 'bg-gray-100 text-[#64748b]');
+
+/* ─────────────────────────────────────────────
+   MONEY
+
+   Indian digit grouping, which is not what toLocaleString does by default:
+   125000 is 1,25,000 here and 125,000 almost everywhere else. A shop reading
+   lakhs off a phone at the counter needs the grouping it thinks in.
+
+   This existed twice already, spelled identically in SecondHandList and
+   ServiceOrderView, while the three sales screens - the screens that are
+   entirely about money - printed bare numbers: a ₹1,25,000 invoice read
+   ₹125000, with no separator to tell you at a glance whether it was twelve
+   thousand or twelve lakh.
+────────────────────────────────────────────── */
+export const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;

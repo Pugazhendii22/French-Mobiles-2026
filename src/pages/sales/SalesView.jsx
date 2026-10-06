@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { money } from '@/shared/ui/uiTokens';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/shared/firebase/firebase';
@@ -18,7 +19,7 @@ const SalesView = () => {
   const [sale, setSale] = useState(null);
   const { sheetProps: dueSheet, handleProps: dueHandle } = useSheetDismiss({ onDismiss: () => setShowDueDialog(false) });
   const [loading, setLoading] = useState(true);
-  const [printing, setPrinting] = useState(false);
+  const [printError, setPrintError] = useState('');
   const [showDueDialog, setShowDueDialog] = useState(false);
   const [duePaymentAmount, setDuePaymentAmount] = useState(0);
   const [duePaymentMethod, setDuePaymentMethod] = useState('Cash');
@@ -40,15 +41,26 @@ const SalesView = () => {
   }, [id]);
 
   const handlePrintInvoice = () => {
-    const htmlContent = generateInvoiceHTML(sale, shopDetails, userDisplayName || currentUser?.email)
+    setPrintError('')
+    /* Checked before it is used. A phone blocks a pop-up it did not ask for and
+       hands back null, and writing to that threw - so pressing Print did nothing
+       at all, with nothing on screen to say why. */
     const printWindow = window.open('', '_blank', 'width=900,height=700')
-    printWindow.document.open()
-    printWindow.document.write(htmlContent)
-    printWindow.document.close()
-    printWindow.focus()
-    setTimeout(() => {
-      printWindow.print()
-    }, 600)
+    if (!printWindow) {
+      setPrintError('The browser blocked the print window. Allow pop-ups for this site, then print again.')
+      return
+    }
+    try {
+      printWindow.document.open()
+      printWindow.document.write(generateInvoiceHTML(sale, shopDetails, userDisplayName || currentUser?.email))
+      printWindow.document.close()
+      printWindow.focus()
+      setTimeout(() => printWindow.print(), 600)
+    } catch (err) {
+      console.error('Invoice print failed:', err)
+      printWindow.close()
+      setPrintError('Could not print the invoice: ' + (err?.message || err))
+    }
   }
 
 
@@ -77,34 +89,59 @@ const SalesView = () => {
     <Layout title="Sale Details" pageType="detail" backTo="/sales">
       <div className="max-w-3xl mx-auto space-y-3">
 
-        {/* ── HERO ── */}
-        <div className={`bg-white rounded-2xl shadow-sm border-l-4 p-4 ${isPaid ? 'border-green-500' : 'border-[#ED2939]'}`}>
-          <div className="flex items-start justify-between gap-3">
+        {/* ── WHAT WAS SOLD, AND WHAT IS STILL OWED ──
+            The answers someone opens a bill for, before any scrolling: who
+            bought it, what the bill came to, what they have handed over and
+            what is left. The breakdown stays in Payment below.
+
+            The total used to be the only figure here and the balance was a
+            chip beside it, so "how much is still owed" - the reason anyone
+            opens a sale that is not settled - was the smallest thing on the
+            card. */}
+        <div className={`bg-white rounded-2xl shadow-sm overflow-hidden border-l-4 ${isPaid ? 'border-green-500' : 'border-[#ED2939]'}`}>
+          <div className="flex items-start justify-between gap-3 p-4">
             <div className="flex-1 min-w-0">
               <p className="text-[11px] font-bold text-[#002395] font-mono">{sale?.invoiceNumber}</p>
-              <h2 className="text-lg font-bold text-[#0f172a] mt-0.5 leading-tight">{sale?.customerName}</h2>
+              <h2 className="text-lg font-bold text-[#0f172a] mt-0.5 leading-tight truncate">{sale?.customerName}</h2>
               {sale?.customerPhone && (
                 <a href={`tel:${sale.customerPhone}`} className="inline-flex items-center gap-1.5 text-green-600 font-semibold text-sm mt-1">
-                  <i className="fas fa-phone text-xs"></i>{sale.customerPhone}
+                  <i className="fas fa-phone text-xs" aria-hidden="true"></i>{sale.customerPhone}
                 </a>
               )}
-              <p className="text-gray-400 text-[11px] mt-1">
+              <p className="text-[#64748b] text-[11px] mt-1">
                 {sale?.createdAt?.toDate?.()?.toLocaleDateString('en-IN')}
               </p>
             </div>
-            <div className="text-right shrink-0">
-              <p className="text-xl font-bold text-[#002395] leading-tight">₹{sale?.totalAmount}</p>
-              <div className="flex flex-col items-end gap-1 mt-1.5">
-                <Chip className={payMethodChip}>{sale?.paymentMethod}</Chip>
-                <Chip className={isPaid ? 'bg-green-100 text-green-700' : 'bg-[#ED2939]/10 text-[#ED2939]'}>
-                  {isPaid ? 'Paid' : `Due ₹${sale?.balanceDue}`}
-                </Chip>
-              </div>
+            <div className="flex flex-col items-end gap-1 shrink-0">
+              <Chip className={payMethodChip}>{sale?.paymentMethod}</Chip>
+              <Chip className={isPaid ? 'bg-green-100 text-green-700' : 'bg-[#ED2939]/10 text-[#ED2939]'}>
+                {isPaid ? 'Paid' : 'Unpaid'}
+              </Chip>
             </div>
           </div>
 
-          {/* ── ACTIONS ── */}
-          <div className="mt-4 pt-3 border-t border-gray-100 space-y-2">
+          {/* The money, in the order the shop asks about it. */}
+          <div className="flex items-stretch border-t border-[#f1f4f9] text-center">
+            <div className="flex-1 py-3">
+              <p className="text-[11px] text-[#64748b]">Bill</p>
+              <p className="text-[15px] font-bold text-[#0f172a] tabular-nums mt-0.5">{money(sale?.totalAmount)}</p>
+            </div>
+            <div className="flex-1 py-3 border-x border-[#f1f4f9]">
+              <p className="text-[11px] text-[#64748b]">Paid</p>
+              <p className="text-[15px] font-bold text-[#002395] tabular-nums mt-0.5">{money(sale?.amountPaid)}</p>
+            </div>
+            <div className="flex-1 py-3">
+              <p className="text-[11px] text-[#64748b]">Still owed</p>
+              <p className={`text-[15px] font-bold tabular-nums mt-0.5 ${isPaid ? 'text-green-700' : 'text-[#ED2939]'}`}>
+                {money(sale?.balanceDue)}
+              </p>
+            </div>
+          </div>
+
+          {/* One thing to do here, and quieter ways to do the rest. Printing and
+              the link across to the service order were two tinted blocks beside
+              the one button that mattered, all three shouting equally. */}
+          <div className="px-4 py-3 border-t border-[#f1f4f9]">
             {sale?.balanceDue > 0 && userRole?.toLowerCase() === 'admin' && (
               <button
                 onClick={() => {
@@ -113,60 +150,75 @@ const SalesView = () => {
                   setDueError('');
                   setShowDueDialog(true);
                 }}
-                className="w-full bg-[#ED2939] text-white py-3 rounded-xl text-sm font-bold"
+                className="w-full bg-[#ED2939] text-white py-3 rounded-xl text-[15px] font-bold"
               >
-                <i className="fas fa-wallet mr-2"></i>Collect ₹{sale?.balanceDue} Due
+                Collect {money(sale?.balanceDue)} now
               </button>
             )}
 
-            <div className="flex gap-2">
+            <div className={`flex items-center justify-center gap-4 ${sale?.balanceDue > 0 && userRole?.toLowerCase() === 'admin' ? 'mt-2.5' : ''}`}>
               <button
                 onClick={handlePrintInvoice}
-                className="flex-1 bg-[#002395]/10 text-[#002395] py-2.5 rounded-xl text-xs font-bold"
+                className="text-[13px] font-semibold text-[#002395] py-1.5"
               >
-                <i className="fas fa-print mr-1.5"></i>Print Invoice
+                Print invoice
               </button>
               {sale?.linkedServiceOrderId && (
-                <button
-                  onClick={() => navigate(`/service/${sale?.linkedServiceOrderId}`)}
-                  className="flex-1 bg-purple-50 text-purple-700 py-2.5 rounded-xl text-xs font-bold"
-                >
-                  <i className="fas fa-link mr-1.5"></i>Service Order
-                </button>
+                <>
+                  <span aria-hidden="true" className="text-[#e2e8f0]">·</span>
+                  <button
+                    onClick={() => navigate(`/service/${sale?.linkedServiceOrderId}`)}
+                    className="text-[13px] font-semibold text-[#002395] py-1.5"
+                  >
+                    Open the service order
+                  </button>
+                </>
               )}
             </div>
 
+            {printError && (
+              <p className="text-center text-[12px] text-[#ED2939] mt-2">{printError}</p>
+            )}
+
             {sale?.balanceDue > 0 && userRole?.toLowerCase() !== 'admin' && (
-              <p className="flex items-center justify-center gap-1.5 bg-gray-100 text-gray-500 py-2.5 rounded-xl text-xs font-semibold">
-                <i className="fas fa-lock"></i> Only an admin can record due payments
+              <p className="text-center text-[12px] text-[#64748b] mt-2">
+                {money(sale?.balanceDue)} is still owed on this bill. Only an admin can record a payment against it.
               </p>
             )}
           </div>
         </div>
 
         {/* ── ITEMS ── */}
-        <Section icon="fa-box" title="Items" hint={`${sale?.items?.length || 0} on this bill`}>
+        <Section
+          icon="fa-box"
+          title="Items"
+          hint="What was sold and what each line went for. Completing this sale took products out of stock and marked any second-hand handset on it as sold."
+        >
           <div className="space-y-2">
             {sale?.items?.map((item, i) => (
               <div key={i} className="flex items-start justify-between gap-3 bg-gray-50 rounded-xl p-3">
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-[#0f172a] text-sm">{item.name}</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">
-                    {item.quantity} × ₹{item.unitPrice}
+                  <p className="text-[11px] text-[#64748b] mt-0.5">
+                    {item.quantity} × {money(item.unitPrice)}
                   </p>
-                  {item.imei && <p className="text-[11px] text-gray-400 break-all">IMEI {item.imei}</p>}
+                  {item.imei && <p className="text-[11px] text-[#64748b] break-all">IMEI {item.imei}</p>}
                 </div>
-                <p className="font-bold text-[#0f172a] text-sm shrink-0">₹{item.total}</p>
+                <p className="font-bold text-[#0f172a] text-sm shrink-0">{money(item.total)}</p>
               </div>
             ))}
           </div>
         </Section>
 
         {/* ── PAYMENT ── */}
-        <Section icon="fa-indian-rupee-sign" title="Payment">
-          <MoneyRow label="Subtotal" value={`₹${sale?.subtotal}`} />
+        <Section
+          icon="fa-indian-rupee-sign"
+          title="Payment"
+          hint="How the bill was settled. Wallet credit comes off what the customer hands over, so it is not money in the till - and profit is what is left after cost, not what was taken."
+        >
+          <MoneyRow label="Subtotal" value={money(sale?.subtotal)} />
           {sale?.discount > 0 && (
-            <MoneyRow label="Discount" value={`- ₹${sale?.discount}`} tone="good" />
+            <MoneyRow label="Discount" value={`- ${money(sale?.discount)}`} tone="good" />
           )}
           {sale?.discountCategory && sale?.discountCategory !== 'manual' && (
             <p className="text-[11px] text-green-600 mt-1">
@@ -179,15 +231,15 @@ const SalesView = () => {
           {sale?.walletUsed > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-[#002395]"><i className="fas fa-wallet mr-1"></i>Wallet Used</span>
-              <span className="font-medium text-[#002395]">- ₹{sale?.walletUsed}</span>
+              <span className="font-medium text-[#002395]">- {money(sale?.walletUsed)}</span>
             </div>
           )}
-          <MoneyRow label="Total" value={`₹${sale?.totalAmount}`} strong divider />
-          <MoneyRow label="Amount Paid" value={`₹${sale?.amountPaid}`} tone="good" />
+          <MoneyRow label="Total" value={money(sale?.totalAmount)} strong divider />
+          <MoneyRow label="Amount Paid" value={money(sale?.amountPaid)} tone="good" />
           <div className="flex justify-between text-sm font-semibold">
             <span>Balance Due</span>
             <span className={sale?.balanceDue > 0 ? 'text-[#ED2939]' : 'text-green-600'}>
-              {sale?.balanceDue > 0 ? `₹${sale?.balanceDue}` : 'Fully Paid ✓'}
+              {sale?.balanceDue > 0 ? `${money(sale?.balanceDue)}` : 'Fully Paid ✓'}
             </span>
           </div>
 
@@ -199,11 +251,11 @@ const SalesView = () => {
               </p>
               <InfoGrid>
                 <InfoRow label="Loan / App No." value={sale?.financeLoanNumber || '-'} mono />
-                <InfoRow label="Down Payment" value={`₹${sale?.downPayment || 0}`} />
-                <InfoRow label="Financed" value={`₹${sale?.financedAmount || 0}`} />
+                <InfoRow label="Down Payment" value={money(sale?.downPayment || 0)} />
+                <InfoRow label="Financed" value={money(sale?.financedAmount || 0)} />
               </InfoGrid>
               <p className="text-[11px] text-indigo-700 mt-2">
-                Customer owes nothing. ₹{sale?.financedAmount || 0} is due to the shop from{' '}
+                Customer owes nothing. {money(sale?.financedAmount || 0)} is due to the shop from{' '}
                 {sale?.financeProvider || sale?.paymentMethod}.
               </p>
             </div>
@@ -212,10 +264,10 @@ const SalesView = () => {
           {sale?.paymentMethod === 'Split' && (
             <div className="bg-gray-50 rounded-xl p-3 mt-3 space-y-1">
               <div className="flex justify-between text-xs text-gray-500">
-                <span>Cash</span><span>₹{sale?.splitCash}</span>
+                <span>Cash</span><span>{money(sale?.splitCash)}</span>
               </div>
               <div className="flex justify-between text-xs text-gray-500">
-                <span>UPI</span><span>₹{sale?.splitUpi}</span>
+                <span>UPI</span><span>{money(sale?.splitUpi)}</span>
               </div>
             </div>
           )}
@@ -224,16 +276,16 @@ const SalesView = () => {
             <div className="border-t border-gray-100 pt-2 mt-2 space-y-1">
               {sale?.totalProfit !== undefined && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Profit</span>
+                  <span className="text-[#64748b]">Profit</span>
                   <span className={`font-semibold ${(sale?.totalProfit || 0) >= 0 ? 'text-green-600' : 'text-[#ED2939]'}`}>
-                    ₹{sale?.totalProfit || 0}
+                    {money(sale?.totalProfit || 0)}
                   </span>
                 </div>
               )}
               {sale?.walletCredited > 0 && (
                 <div className="flex justify-between text-xs text-[#002395]">
                   <span><i className="fas fa-wallet mr-1"></i>Wallet Credited</span>
-                  <span>+₹{sale?.walletCredited}</span>
+                  <span>+{money(sale?.walletCredited)}</span>
                 </div>
               )}
             </div>
@@ -242,7 +294,11 @@ const SalesView = () => {
 
         {/* ── NOTES ── */}
         {sale?.notes && (
-          <Section icon="fa-note-sticky" title="Notes">
+          <Section
+            icon="fa-note-sticky"
+            title="Notes"
+            hint="For the shop only. Unlike a service order's suggestions, nothing here is printed on the customer's invoice."
+          >
             <p className="text-sm text-gray-600 bg-gray-50 rounded-xl p-3">{sale?.notes}</p>
           </Section>
         )}
@@ -257,7 +313,7 @@ const SalesView = () => {
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-bold text-[#0f172a]">Collect Due</h3>
-                  <p className="text-xs text-gray-400">Balance due ₹{sale?.balanceDue}</p>
+                  <p className="text-xs text-[#64748b]">Balance due {money(sale?.balanceDue)}</p>
                 </div>
                 <button onClick={() => setShowDueDialog(false)} className="w-10 h-10 rounded-full flex items-center justify-center text-gray-400" aria-label="Close">
                   <i className="fas fa-times"></i>
