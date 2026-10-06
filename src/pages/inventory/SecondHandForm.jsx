@@ -538,12 +538,16 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
     return uploadImageToCloudinary(file);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validateAndScroll()) return;
+  /**
+   * Write the purchase, and hand back what was written.
+   * Returns null when validation stopped it or the write failed - in both
+   * cases the reason is already on screen.
+   */
+  const saveMobile = async () => {
+    if (!validateAndScroll()) return null;
     if (!formData.photo1Url) {
       setError("Photo 1 (Front) is required.");
-      return;
+      return null;
     }
     setSaveStatus('saving');
     setError('');
@@ -557,7 +561,8 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       const finalData = { ...formData, conditionChecklist, wasRepaired, repairItems: wasRepaired ? repairItems : [], repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, sellerCustomerId, sellerIdType, sellerIdNumber, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
       delete finalData.customBrand;
 
-      if (!initialData) {
+      // Only on the very first write - a second save is not a new device.
+      if (!initialData && !localId) {
         recordTacIfNew(finalData.imei1, finalData.brand, finalData.model, currentUser?.uid);
       }
 
@@ -575,10 +580,17 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
         models: { [finalData.brand]: finalData.model },
         field_options: { supplier: finalData.supplier },
       });
+      return { ...finalData, id: newId || localId };
     } catch (err) {
       setError(err.message);
       setSaveStatus('idle');
+      return null;
     }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    await saveMobile();
   };
 
   const handleSaveAndPrint = async () => {
@@ -684,14 +696,32 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
   };
 
   // Printed at the counter so the seller signs it while handing the device over
-  const handlePrintPurchaseForm = () => {
-    const formDataForPrint = {
-      ...formData,
-      assignedLabelNumber: labelAssigned ? assignedLabelNumber : null,
+  /* Printing saves first. The declaration describes a purchase, so it should
+     never describe one the shop has no record of - and the seller's signature
+     is only a drawing in the browser until a save uploads it. A signature is
+     not required: a declaration printed to be signed on paper is a normal way
+     to work. */
+  const handlePrintPurchaseForm = async () => {
+    const saved = await saveMobile();
+    if (!saved) return;
+
+    const seller = customers.find(c => c.id === saved.sellerCustomerId) || {
+      name: saved.sellerName,
+      phone: saved.sellerPhone,
+      idType: sellerIdType,
+      idNumber: sellerIdNumber,
     };
-    const seller = customers.find(c => c.id === formData.sellerCustomerId) || {};
-    const html = generateSecondHandPurchaseForm(formDataForPrint, shopDetails, seller, currentUser?.displayName || '');
+    const html = generateSecondHandPurchaseForm(
+      { ...saved, assignedLabelNumber: labelAssigned ? assignedLabelNumber : null },
+      shopDetails,
+      seller,
+      currentUser?.displayName || '',
+    );
     const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setError('Your browser blocked the print window. Allow pop-ups for this site and try again.');
+      return;
+    }
     printWindow.document.write(html);
     printWindow.document.close();
     setTimeout(() => printWindow.print(), 500);
@@ -1379,15 +1409,16 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
                 <button
                   type="button"
                   onClick={handlePrintPurchaseForm}
-                  disabled={!localId}
+                  disabled={saveStatus === 'saving'}
                   className="w-full border border-[#e2e8f0] text-[#002395] rounded-xl py-2.5 text-sm font-semibold disabled:text-[#94a3b8] disabled:bg-[#f8fafc]"
                 >
-                  <i className="fas fa-file-signature mr-2"></i>Print purchase declaration
+                  <i className="fas fa-file-signature mr-2"></i>
+                  {saveStatus === 'saving' ? 'Saving...' : 'Save and print declaration'}
                 </button>
                 <p className="text-[12px] text-[#64748b] mt-2 leading-relaxed">
-                  {localId
-                    ? "Prints with the seller's signature and the shop's terms, ready to sign and file."
-                    : 'Save the purchase first. The declaration prints the signature, which is only stored once you save.'}
+                  Saves the purchase, then prints the declaration with the shop's
+                  terms and whatever signature has been captured - sign it on
+                  paper if the seller has not signed here.
                 </p>
               </div>
 
