@@ -29,7 +29,7 @@
 ────────────────────────────────────────────── */
 
 import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 
 const DB_NAME = 'french-mobiles';
 const DB_VERSION = 1;

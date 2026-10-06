@@ -39,3 +39,6 @@ tac-database-backup*.json
 
 # Local editor/agent config
 .claude/
+
+# Local agent working directory
+.remember/

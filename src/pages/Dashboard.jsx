@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { db } from '../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { collection, getDocs, getCountFromServer, getAggregateFromServer, sum, query, where, orderBy, limit } from 'firebase/firestore';
-import Layout from '../components/common/Layout';
-import { Section, EmptyState } from '../components/common/ui';
-import { describeFirebaseError } from '../utils/firebaseError';
-import { loadCollection } from '../utils/collectionCache';
+import Layout from '@/shared/ui/Layout';
+import { Section, EmptyState } from '@/shared/ui/ui';
+import { describeFirebaseError } from '@/shared/firebase/firebaseError';
+import { loadCollection } from '@/shared/data/collectionCache';
 
 /* Compact tappable tile - the unit the whole stat grid is built from.
    Defined at module level so it is not recreated on every render. */

@@ -1,21 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
-import { db, auth } from '../../firebase/firebase';
+import { db, auth } from '@/shared/firebase/firebase';
 import { useSettings } from '../../context/SettingsContext';
 import SecondHandForm from './SecondHandForm';
-import { getLabelNumber } from '../../utils/getLabelNumber';
-import { generateLabelHTML } from '../../utils/printLabel.jsx';
-import PrinterSelector from '../../components/PrinterSelector';
-import Layout from '../../components/common/Layout';
-import ImageModal from '../../components/common/ImageModal';
+import { getLabelNumber } from '@/features/labels/data';
+import { generateLabelHTML } from '@/features/labels/printing/printLabel';
+import PrinterSelector from '@/features/labels/printing/PrinterSelector';
+import Layout from '@/shared/ui/Layout';
+import ImageModal from '@/shared/ui/ImageModal';
 import { useAuth } from '../../context/AuthContext';
-import { invalidateCollection } from '../../utils/collectionCache';
-import { Section, InfoRow, InfoGrid, Chip, MoneyRow } from '../../components/common/ui';
-import { gradeColor } from '../../components/common/uiTokens';
+import { invalidateCollection } from '@/shared/data/collectionCache';
+import { Section, InfoRow, InfoGrid, MoneyRow } from '@/shared/ui/ui';
+import { gradeOf } from '@/shared/ui/uiTokens';
 import { generateSecondHandPurchaseForm } from '../../utils/generateSecondHandPurchaseForm';
-import { imageThumb } from '../../utils/imageUrl';
-import { secondHandLabelData, syncLabelSnapshot, withLiveLabelData } from '../../utils/labelSync';
+import { imageThumb } from '@/shared/lib/imageUrl';
+import NewSaleModal from '@/components/sales/NewSaleModal';
+import { secondHandLabelData, syncLabelSnapshot, withLiveLabelData } from '@/features/labels/data';
 
 const groupByCategory = (items) => {
   const grouped = {}
@@ -45,6 +46,8 @@ const SecondHandView = () => {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerUrl, setViewerUrl] = useState('');
   const [viewerTitle, setViewerTitle] = useState('');
+  /* Prefilled items for the sale sheet, or null while it is closed. */
+  const [sellOpen, setSellOpen] = useState(null);
 
   const fetchMobile = async () => {
     try {
@@ -142,22 +145,20 @@ const SecondHandView = () => {
     <Layout title="Second-Hand Detail" pageType="detail" backTo="/inventory/second-hand">
       <div className="max-w-3xl mx-auto space-y-3">
 
-        {/* ── HERO ── */}
-        <div className={`bg-white rounded-2xl shadow-sm border-l-4 p-4 ${
-          mobile?.condition === 'A' ? 'border-green-500' :
-          mobile?.condition === 'B' ? 'border-[#002395]' :
-          mobile?.condition === 'C' ? 'border-orange-500' :
-          'border-[#ED2939]'
-        }`}>
-          <div className="flex gap-3">
-            <div className="w-20 h-20 rounded-xl bg-gray-50 border border-gray-100 shrink-0 overflow-hidden flex items-center justify-center">
+        {/* ── WHAT THIS IS, AND WHAT IT IS WORTH ──
+            The answers someone opens this page for, before any scrolling:
+            which handset, is it still here, what does it sell for, and what
+            does the shop make on it. The breakdown stays further down. */}
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div className="flex gap-3 p-4">
+            <div className="w-20 h-20 rounded-xl bg-[#f8fafc] border border-[#f1f4f9] shrink-0 overflow-hidden flex items-center justify-center">
               {heroPhoto ? (
                 <img
-                  src={imageThumb(heroPhoto, 80)}
+                  src={imageThumb(heroPhoto, 160)}
                   loading="lazy"
                   decoding="async"
                   alt={`${mobile?.brand} ${mobile?.model}`}
-                  className="w-full h-full object-cover cursor-pointer"
+                  className={`w-full h-full object-cover cursor-pointer ${isAvailable ? '' : 'grayscale opacity-60'}`}
                   onClick={() => {
                     setViewerUrl(heroPhoto);
                     setViewerTitle(`${mobile?.brand} ${mobile?.model}`);
@@ -170,73 +171,86 @@ const SecondHandView = () => {
             </div>
 
             <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <h2 className="text-lg font-bold text-[#0f172a] leading-tight">
-                  {mobile?.brand} {mobile?.model}
-                </h2>
-                <p className="text-xl font-bold text-[#002395] shrink-0 leading-tight">₹{mobile?.salePrice}</p>
-              </div>
-              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                <Chip className={gradeColor(mobile?.condition)}>Grade {mobile?.condition}</Chip>
-                {mobile?.ram && <Chip className="bg-[#002395]/10 text-[#002395]">{mobile?.ram}</Chip>}
-                {mobile?.rom && <Chip className="bg-gray-100 text-gray-600">{mobile?.rom}</Chip>}
-                <Chip className={isAvailable ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}>
-                  {isAvailable ? 'Available' : 'Sold'}
-                </Chip>
+              <h2 className="text-[17px] font-bold text-[#0f172a] leading-tight">
+                {mobile?.brand} {mobile?.model}
+              </h2>
+              <p className="text-[13px] text-[#64748b] mt-0.5">
+                {[[mobile?.ram, mobile?.rom].filter(Boolean).join(' + '), gradeOf(mobile?.condition).label]
+                  .filter(Boolean).join(' · ')}
+              </p>
+
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <span className={`text-[12px] font-bold px-2.5 py-1 rounded-lg ${
+                  isAvailable ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
+                }`}>
+                  {isAvailable ? 'In stock' : 'Sold'}
+                </span>
                 {labelEntry && (
-                  <Chip className="bg-[#002395]/10 text-[#002395]">
-                    <i className="fas fa-tag mr-1"></i>#{labelEntry.labelNumber}
-                  </Chip>
+                  <span className="text-[12px] font-semibold text-[#64748b]">
+                    Label #{labelEntry.labelNumber}
+                  </span>
                 )}
               </div>
-              {mobile?.purchasePrice && (
-                <p className="text-[11px] text-gray-400 mt-1.5">Cost ₹{mobile?.purchasePrice}</p>
-              )}
             </div>
           </div>
 
-          {/* ── ACTIONS ── */}
-          <div className="mt-4 pt-3 border-t border-gray-100 space-y-2">
+          {/* The money, in the order the shop thinks about it. */}
+          <div className="flex items-stretch border-t border-[#f1f4f9] text-center">
+            <div className="flex-1 py-3">
+              <p className="text-[11px] text-[#64748b]">Paid</p>
+              <p className="text-[15px] font-bold text-[#0f172a] tabular-nums mt-0.5">
+                ₹{Number(mobile?.totalCost || mobile?.purchasePrice || 0).toLocaleString('en-IN')}
+              </p>
+            </div>
+            <div className="flex-1 py-3 border-x border-[#f1f4f9]">
+              <p className="text-[11px] text-[#64748b]">Selling for</p>
+              <p className="text-[15px] font-bold text-[#002395] tabular-nums mt-0.5">
+                ₹{Number(mobile?.salePrice || 0).toLocaleString('en-IN')}
+              </p>
+            </div>
+            <div className="flex-1 py-3">
+              <p className="text-[11px] text-[#64748b]">{isAvailable ? 'Profit if sold' : 'Profit'}</p>
+              <p className={`text-[15px] font-bold tabular-nums mt-0.5 ${
+                (mobile?.profit || 0) >= 0 ? 'text-green-700' : 'text-[#ED2939]'
+              }`}>
+                ₹{Number(mobile?.profit || 0).toLocaleString('en-IN')}
+              </p>
+            </div>
+          </div>
+
+          {/* One thing to do here, and quieter ways to do the rest. */}
+          <div className="px-4 py-3 border-t border-[#f1f4f9]">
             {isAvailable && (
               <button
                 onClick={() => {
-                  navigate('/sales', {
-                    state: {
-                      items: [
-                        {
-                          type: 'Second-hand',
-                          itemId: mobile.id,
-                          name: `${mobile.brand} ${mobile.model}`,
-                          quantity: 1,
-                          unitPrice: Number(mobile.salePrice || 0),
-                          purchaseCost: Number(mobile.purchasePrice || 0),
-                          repairCost: Number(mobile.repairCost || 0),
-                          imei: mobile.imei1 || ''
-                        }
-                      ]
-                    }
+                  /* The sale opens over this page. Leaving for /sales meant a
+                     mis-tap cost you the device you were looking at, and coming
+                     back landed on the list rather than here. */
+                  setSellOpen({
+                    items: [
+                      {
+                        type: 'Second-hand',
+                        itemId: mobile.id,
+                        name: `${mobile.brand} ${mobile.model}`,
+                        quantity: 1,
+                        unitPrice: Number(mobile.salePrice || 0),
+                        purchaseCost: Number(mobile.purchasePrice || 0),
+                        repairCost: Number(mobile.repairCost || 0),
+                        imei: mobile.imei1 || ''
+                      }
+                    ]
                   });
                 }}
-                className="w-full bg-green-600 text-white py-3 rounded-xl text-sm font-bold"
+                className="w-full bg-[#16a34a] text-white py-3 rounded-xl text-[15px] font-bold"
               >
-                <i className="fas fa-cart-plus mr-2"></i>Sell Mobile
+                Sell this mobile
               </button>
             )}
 
-            <button
-              onClick={handlePrintPurchaseForm}
-              className="w-full bg-amber-50 text-amber-700 py-2.5 rounded-xl text-xs font-bold"
-            >
-              <i className="fas fa-file-signature mr-1.5"></i>Print Purchase Declaration
-            </button>
-
-            <div className="flex gap-2">
+            <div className={`flex items-center justify-center gap-4 ${isAvailable ? 'mt-2.5' : ''}`}>
               {canEdit && (
-                <button
-                  onClick={() => setShowEdit(true)}
-                  className="flex-1 bg-[#002395]/10 text-[#002395] py-2.5 rounded-xl text-xs font-bold"
-                >
-                  <i className="fas fa-edit mr-1.5"></i>Edit
+                <button onClick={() => setShowEdit(true)} className="text-[13px] font-semibold text-[#002395] py-1.5">
+                  Edit details
                 </button>
               )}
               {labelEntry ? (
@@ -246,30 +260,27 @@ const SecondHandView = () => {
                     setLabelHTML(html)
                     setShowPrinter(true)
                   }}
-                  className="flex-1 bg-[#ED2939]/10 text-[#ED2939] py-2.5 rounded-xl text-xs font-bold"
+                  className="text-[13px] font-semibold text-[#002395] py-1.5"
                 >
-                  <i className="fas fa-print mr-1.5"></i>Print #{labelEntry.labelNumber}
+                  Print label #{labelEntry.labelNumber}
                 </button>
               ) : canEdit ? (
-                <button
-                  onClick={openLabelDialog}
-                  className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-xl text-xs font-bold"
-                >
-                  <i className="fas fa-tag mr-1.5"></i>Assign Label
+                <button onClick={openLabelDialog} className="text-[13px] font-semibold text-[#002395] py-1.5">
+                  Assign a label
                 </button>
               ) : null}
             </div>
 
             {!isAvailable && userRole?.toLowerCase() !== 'admin' && (
-              <p className="flex items-center justify-center gap-1.5 bg-gray-100 text-gray-500 py-2.5 rounded-xl text-xs font-semibold">
-                <i className="fas fa-lock"></i> Sold - locked (admin only)
+              <p className="text-center text-[12px] text-[#64748b] mt-2">
+                This one is sold, so only an admin can change it now.
               </p>
             )}
           </div>
         </div>
 
         {/* ── COST & PROFIT ── */}
-        <Section icon="fa-indian-rupee-sign" title="Cost & Profit">
+        <Section icon="fa-indian-rupee-sign" title="Cost & Profit" hint="What you paid, what you repaired, and what is left when it sells.">
           <MoneyRow label="Purchase Price" value={`₹${mobile?.purchasePrice || 0}`} />
           {mobile?.wasRepaired && mobile?.repairCost > 0 && (
             <MoneyRow label="Repair Cost" value={`₹${mobile?.repairCost}`} tone="bad" />
@@ -286,7 +297,7 @@ const SecondHandView = () => {
         </Section>
 
         {/* ── DEVICE INFO ── */}
-        <Section icon="fa-circle-info" title="Device Info">
+        <Section icon="fa-circle-info" title="Device Info" hint="The numbers that identify this exact handset. IMEI is what a customer or the police will ask for.">
           <InfoGrid>
             <InfoRow label="IMEI 1" value={mobile?.imei1} mono />
             <InfoRow label="IMEI 2" value={mobile?.imei2} mono />
@@ -374,7 +385,7 @@ const SecondHandView = () => {
 
         {/* ── REPAIR ── */}
         {mobile?.wasRepaired && (
-          <Section icon="fa-screwdriver-wrench" title="Repair & Refurbishment" tone="danger">
+          <Section icon="fa-screwdriver-wrench" title="Repair & Refurbishment" tone="danger" hint="Work paid for before resale. It counts towards the cost above, so the profit stays honest.">
             <div className="space-y-2 mb-3">
               {mobile?.repairItems?.map((item, index) => (
                 <div key={index} className="bg-gray-50 rounded-xl p-3 flex items-start justify-between gap-3">
@@ -404,7 +415,7 @@ const SecondHandView = () => {
 
         {/* ── SELLER ── */}
         {mobile?.sellerCustomerId && (
-          <Section icon="fa-user" title="Seller">
+          <Section icon="fa-user" title="Seller" hint="Who handed this phone over, and how to reach them.">
             <InfoGrid>
               <InfoRow label="Name" value={mobile?.sellerName} />
               <InfoRow label="Phone" value={mobile?.sellerPhone} href={`tel:${mobile?.sellerPhone}`} />
@@ -420,7 +431,20 @@ const SecondHandView = () => {
 
         {/* ── SELLER AGREEMENT ── */}
         {(mobile?.sellerSignatureUrl || mobile?.agreementAcceptedAt) && (
-          <Section icon="fa-file-signature" title="Seller Agreement" tone="danger">
+          <Section
+            icon="fa-file-signature"
+            title="Seller Agreement"
+            tone="danger"
+            hint="Their signature confirming the sale is final and the phone is theirs to sell."
+            action={
+              <button
+                onClick={handlePrintPurchaseForm}
+                className="text-[12px] font-semibold text-[#002395] shrink-0"
+              >
+                Print declaration
+              </button>
+            }
+          >
             {mobile?.sellerSignatureUrl && (
               <div className="border border-[#e2e8f0] rounded-xl bg-white p-2">
                 <img
@@ -539,6 +563,16 @@ const SecondHandView = () => {
 
         {showEdit && (
           <SecondHandForm initialData={mobile} onSave={handleUpdate} onCancel={() => setShowEdit(false)} />
+        )}
+
+        {/* Selling happens over this page, so closing it leaves you on the
+            device you were already looking at. */}
+        {sellOpen && (
+          <NewSaleModal
+            prefillData={sellOpen}
+            onClose={() => setSellOpen(null)}
+            onSuccess={() => { invalidateCollection('second_hand_mobiles'); fetchMobile(); }}
+          />
         )}
 
         <PrinterSelector

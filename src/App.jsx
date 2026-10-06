@@ -2,8 +2,8 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
-import PWAInstallPrompt from './components/PWAInstallPrompt';
-import ErrorBoundary from './components/common/ErrorBoundary';
+import PWAInstallPrompt from '@/shared/ui/PWAInstallPrompt';
+import ErrorBoundary from '@/shared/ui/ErrorBoundary';
 
 // Lazy load components
 const Login = lazy(() => import('./pages/Login'));
@@ -14,8 +14,8 @@ const CustomerList = lazy(() => import('./pages/customers/CustomerList'));
 const CustomerView = lazy(() => import('./pages/customers/CustomerView'));
 const SecondHandList = lazy(() => import('./pages/inventory/SecondHandList'));
 const SecondHandView = lazy(() => import('./pages/inventory/SecondHandView'));
-const ProductList = lazy(() => import('./pages/products/ProductList'));
-const ProductView = lazy(() => import('./pages/products/ProductView'));
+const ProductList = lazy(() => import('./features/products/ProductList'));
+const ProductView = lazy(() => import('./features/products/ProductView'));
 const ServiceOrderList = lazy(() => import('./pages/service/ServiceOrderList'));
 const ServiceOrderView = lazy(() => import('./pages/service/ServiceOrderView'));
 const SalesList = lazy(() => import('./pages/sales/SalesList'));

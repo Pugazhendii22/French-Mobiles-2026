@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
-import PatternLock from '../../components/PatternLock';
-import ImageModal from '../../components/common/ImageModal';
+import { db } from '@/shared/firebase/firebase';
+import PatternLock from '@/shared/components/PatternLock';
+import ImageModal from '@/shared/ui/ImageModal';
 import { useAuth } from '../../context/AuthContext';
-import { imageThumb } from '../../utils/imageUrl';
-import { secondHandLabelData } from '../../utils/labelSync';
+import { imageThumb } from '@/shared/lib/imageUrl';
+import { secondHandLabelData } from '@/features/labels/data';
 
 const Badge = ({ children, color }) => (
   <span className={`rounded-full px-3 py-1 text-xs font-bold ${color}`}>

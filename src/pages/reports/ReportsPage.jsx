@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import Layout from '../../components/common/Layout';
+import Layout from '@/shared/ui/Layout';
 import { loadCustomers } from '../../utils/customerCache';
-import { loadCollection } from '../../utils/collectionCache';
+import { loadCollection } from '@/shared/data/collectionCache';
 
 const ReportsPage = () => {
   const { userRole } = useAuth();

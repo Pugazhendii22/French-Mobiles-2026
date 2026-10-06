@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
 import { collection, getDocs, addDoc, updateDoc, doc, increment, query, where, limit, getDoc } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
-import { invalidateCollection } from '../../utils/collectionCache';
+import { db } from '@/shared/firebase/firebase';
+import { invalidateCollection } from '@/shared/data/collectionCache';
 import { useAuth } from '../../context/AuthContext';
 import { creditWallet, debitWallet } from '../../utils/walletUtils';
-import { nextDailyNumber } from '../../utils/counters';
+import { nextDailyNumber } from '@/shared/data/counters';
 import { rememberCustomer } from '../../utils/customerCache';
 import SalesForm from '../../pages/sales/SalesForm';
+import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 
 const NewSaleModal = ({ isOpen = true, modalOnly = false, onClose, prefillData, onSuccess }) => {
   const { currentUser } = useAuth();
@@ -138,13 +139,20 @@ const NewSaleModal = ({ isOpen = true, modalOnly = false, onClose, prefillData, 
     return () => { document.body.style.overflow = "unset"; };
   }, [isOpen]);
 
+  /* The grab handle promises this sheet can be pulled down; make it true.
+     Declared above the early return so the hook runs on every render. */
+  const { sheetProps, handleProps, scrollRef } = useSheetDismiss({ onDismiss: onClose });
+
   if (isOpen === false) return null;
 
   const modalContent = (
-    <div className="bg-[#f1f5f9] w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col h-[94dvh] md:h-auto md:max-h-[90vh] overflow-hidden shadow-2xl">
+    <div
+      {...sheetProps}
+      className="bg-[#f1f5f9] w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col h-[94dvh] md:h-auto md:max-h-[90vh] overflow-hidden shadow-2xl"
+    >
 
-      {/* Grab handle */}
-      <div className="md:hidden flex justify-center pt-2.5 pb-1 flex-shrink-0 bg-white">
+      {/* Grab handle - drag it down to close */}
+      <div {...handleProps} aria-label="Drag down to close" className="md:hidden flex justify-center pt-2.5 pb-2 flex-shrink-0 bg-white">
         <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
       </div>
 
@@ -162,7 +170,7 @@ const NewSaleModal = ({ isOpen = true, modalOnly = false, onClose, prefillData, 
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-3 pb-safe">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 pb-safe">
         <SalesForm onSave={handleSaveSale} onCancel={onClose} prefillData={prefillData} />
       </div>
     </div>

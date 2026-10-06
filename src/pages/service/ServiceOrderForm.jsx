@@ -1,22 +1,26 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
-import { Section, FieldError } from '../../components/common/ui';
-import { inputClass, labelClass, errorInput } from '../../components/common/uiTokens';
+import { Section, FieldError } from '@/shared/ui/ui';
+import { inputClass, labelClass, errorInput } from '@/shared/ui/uiTokens';
 import { collection, getDocs, addDoc, query, where, setDoc, updateDoc, doc } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import CustomerAutocomplete from '../../components/common/CustomerAutocomplete';
-import ImeiInput from '../../components/ImeiInput';
-import { getLabelNumber } from '../../utils/getLabelNumber';
-import { uploadImageToCloudinary } from '../../utils/uploadImage';
-import { generateLabelHTML } from '../../utils/printLabel.jsx';
+import ImeiInput from '@/shared/components/ImeiInput';
+import ComboBox from '@/shared/ui/ComboBox';
+import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
+import { readDraft, writeDraft, clearDraft } from '@/shared/lib/formDraft';
+import { requireOrderDates } from '@/features/service/orderState';
+import { getLabelNumber } from '@/features/labels/data';
+import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
+import { generateLabelHTML } from '@/features/labels/printing/printLabel';
 import { generateServiceJobCard } from '../../utils/generateServiceJobCard';
-import PrinterSelector from '../../components/PrinterSelector';
-import { imageThumb } from '../../utils/imageUrl';
+import PrinterSelector from '@/features/labels/printing/PrinterSelector';
+import { imageThumb } from '@/shared/lib/imageUrl';
 import { loadCustomers } from '../../utils/customerCache';
-import { recordTacIfNew } from '../../utils/tacLookup';
+import { recordTacIfNew } from '@/features/labels/tacLookup';
 
-const PatternLock = lazy(() => import('../../components/PatternLock').catch(() => ({ default: () => <div className="text-red-500">Failed to load PatternLock</div> })));
+const PatternLock = lazy(() => import('@/shared/components/PatternLock').catch(() => ({ default: () => <div className="text-red-500">Failed to load PatternLock</div> })));
 
 const generateSerialNumber = () => {
   const date = new Date()
@@ -29,12 +33,26 @@ const generateSerialNumber = () => {
 
 const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
   const { currentUser, userName, userRole } = useAuth();
-  const { complaintTypes: complaintTypeOptions = [], accessories: accessoryOptions = [], brands: brandOptions = [], models: modelOptions = {}, shopDetails } = useSettings();
+  const { complaintTypes: complaintTypeOptions = [], accessories: accessoryOptions = [], brands: brandOptions = [], models: modelOptions = {}, shopDetails, fieldOptions = {}, rememberOptions } = useSettings();
   const [staffOptions, setStaffOptions] = useState([]);
 
   const LOCK_TYPES = ['None', 'PIN', 'Password', 'Pattern', 'Fingerprint', 'Face Unlock', 'Other'];
   const ACCESSORIES_OPTIONS = accessoryOptions;
   const MODELS = modelOptions;
+
+  /* The grab handle promises this sheet can be pulled down; make it true. */
+  /* Pulling the sheet down might be a slip, so it keeps the draft. The X is a
+     decision, so it throws the draft away - see discardAndClose below. */
+  const { sheetProps, handleProps, scrollRef } = useSheetDismiss({ onDismiss: onCancel });
+
+  /* One key per order being edited, so a half-typed new intake and an edit of
+     an existing order cannot overwrite one another. */
+  const draftKey = `service-order:${initialData?.id || 'new'}`;
+
+  const discardAndClose = () => {
+    clearDraft(draftKey);
+    onCancel();
+  };
   const COMPLAINTS = complaintTypeOptions;
   const STATUSES = ['Received', 'In Progress', 'Parts Awaiting', 'Completed', 'Awaiting Customer Approval', 'Returned'];
 
@@ -55,12 +73,6 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     ? (MODELS[prefillBrand] || []).find(m => m.toLowerCase() === prefillData.model.toLowerCase())
     : null;
 
-  const [customModel, setCustomModel] = useState(
-    () => (!initialData && prefillData?.model && !prefillModelMatch) ? prefillData.model : ''
-  );
-  const [isCustomModel, setIsCustomModel] = useState(
-    () => !!(!initialData && prefillData?.model && !prefillModelMatch)
-  );
 
   const formatDateTimeLocal = (value) => {
     if (!value) return '';
@@ -69,7 +81,7 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     return date.toISOString().slice(0, 16);
   };
 
-  const [formData, setFormData] = useState(() => {
+  const buildFreshForm = () => {
     const nowLocal = new Date().toISOString().slice(0, 16);
     const base = initialData ? {
       ...initialData,
@@ -112,7 +124,61 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       complaintTypes: base.complaintTypes || (base.complaintNature ? [base.complaintNature] : []),
       otherComplaint: base.otherComplaint || (base.customComplaint || '')
     };
+  };
+
+  /* An untouched intake form is not empty: it already carries the time the
+     device arrived, a status of Received, a technician and a lock type of None.
+     Those count as content as far as storage is concerned, so without this an
+     untouched form stored a draft - and the next person to open it was offered
+     their "unsaved work" back. A draft is only a draft once it differs. */
+  const [pristine] = useState(() => JSON.stringify(buildFreshForm()));
+
+  const [formData, setFormData] = useState(() => {
+    /* Whatever was typed before the form was closed wins, except over a device
+       the scanner just handed us - that is a fresh intake, not the old draft. */
+    const draft = prefillData ? null : readDraft(draftKey);
+    const fresh = buildFreshForm();
+    return draft ? { ...fresh, ...draft } : fresh;
   });
+
+  const [restoredDraft, setRestoredDraft] = useState(() => {
+    if (prefillData) return false;
+    const draft = readDraft(draftKey);
+    if (!draft) return false;
+    return JSON.stringify({ ...buildFreshForm(), ...draft }) !== pristine;
+  });
+
+  /* What the form looked like when it was last written, or null if it never
+     was. Two things read it.
+
+     The draft keeps itself out of the way: without the comparison, the state
+     change a save causes would write the draft straight back after it had been
+     cleared, and a saved order would still greet the next person with "picked
+     up where you left off".
+
+     The footer reads it to tell saved from edited-since-saved. It is state and
+     not a ref for exactly that reason - a ref read during render is both a lint
+     error and a value React is not obliged to have refreshed. */
+  const [savedSnapshot, setSavedSnapshot] = useState(null);
+
+  /* Keep what has been typed, as it is typed. Declared below formData: the
+     dependency array is read during render, so referencing it any earlier
+     throws before the form can draw. */
+  useEffect(() => {
+    const now = JSON.stringify(formData);
+    if (now === savedSnapshot) return;
+    if (now === pristine) { clearDraft(draftKey); return; }
+    writeDraft(draftKey, formData);
+  }, [draftKey, formData, pristine, savedSnapshot]);
+
+  const startFresh = () => {
+    clearDraft(draftKey);
+    setRestoredDraft(false);
+    setFormData(buildFreshForm());
+    setFieldErrors({});
+    setError('');
+    scrollRef.current?.scrollTo({ top: 0 });
+  };
 
   const [complaintSearch, setComplaintSearch] = useState('');
 
@@ -305,8 +371,90 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     }
   };
 
+  /* ── WHAT ACTUALLY GETS SAVED ──
+     Both save paths build this, and they used to build it separately: forty
+     lines duplicated between Create Order and Save & Print, which had already
+     drifted apart. Save refused an unparseable date and Save & Print wrote it
+     to Firestore as an Invalid Date. One builder, one set of rules.
+     Throws rather than returning a flag, so a caller cannot forget to look. */
+  const buildFinalData = () => {
+    const { received: receivedAtDate, expected: expectedCompletionDate } =
+      requireOrderDates(formData.receivedAt, formData.expectedCompletionAt);
+
+    const finalData = { ...formData, createdBy: currentUser?.uid || '' };
+    delete finalData.customBrand;
+    delete finalData.complaintNature;
+    delete finalData.customComplaint;
+    delete finalData.imei;
+    if (!finalData.complaintTypes.includes('Other')) {
+      finalData.otherComplaint = '';
+    }
+
+    /* Only for a device never saved from this form. Without the localId check,
+       saving and then printing recorded the same handset twice. */
+    if (!initialData && !localId) {
+      recordTacIfNew(finalData.imei1, finalData.brand, finalData.model, currentUser?.uid);
+    }
+
+    const role = userRole?.toLowerCase();
+    if (role === 'admin') {
+      const selectedTech = staffOptions.find(u => u.uid === finalData.technicianUid);
+      finalData.technicianName = selectedTech?.name || finalData.technicianName || currentUser?.displayName || currentUser?.email || '';
+      finalData.technicianUid = finalData.technicianUid || currentUser?.uid || '';
+    } else {
+      // Staff, and anyone whose role has not loaded, own the orders they take in.
+      finalData.technicianName = userName || currentUser?.displayName || currentUser?.email || '';
+      finalData.technicianUid = currentUser?.uid || '';
+    }
+
+    finalData.alternatePhone = formData.alternatePhone || '';
+    finalData.receivedAt = receivedAtDate;
+    finalData.expectedCompletionAt = expectedCompletionDate;
+    if (finalData.lockType !== 'Pattern') finalData.lockPattern = [];
+    if (!['PIN', 'Password', 'Other'].includes(finalData.lockType)) finalData.lockHint = '';
+
+    finalData.serviceProfit = (Number(formData.estimatedPrice) || 0) -
+      (Number(formData.rawMaterialCost) || 0) -
+      (Number(formData.outsideLabourCost) || 0);
+
+    if (localId) finalData.id = localId;
+    return finalData;
+  };
+
+  /* What a save handed back. The list returns the id together with the order
+     number it drew from the daily counter; the device page returns the id alone,
+     because an order it is already editing has a number. */
+  const readSaveResult = (saved) => (
+    typeof saved === 'string' || !saved
+      ? { id: saved || null, orderNumber: null }
+      : { id: saved.id || null, orderNumber: saved.orderNumber || null }
+  );
+
+  /* The form as it stands once the save's own answer is folded back in, which is
+     also what stops the draft being kept. The order number only exists after the
+     first write, and it has to be inside the snapshot or the footer would read
+     it as an unsaved edit and offer to save it again.
+
+     The settled form is returned, not just stored: setFormData does not take
+     effect until the next render, so a caller that prints straight after saving
+     would otherwise read the form as it was before the number arrived - and
+     print a job card with no order number on it. */
+  const noteSaved = (finalData, orderNumber) => {
+    const settled = orderNumber ? { ...formData, orderNumber } : formData;
+    if (orderNumber && orderNumber !== formData.orderNumber) setFormData(settled);
+    setSavedSnapshot(JSON.stringify(settled));
+    clearDraft(draftKey);
+    setRestoredDraft(false);
+    rememberOptions({
+      brands: finalData.brand,
+      models: { [finalData.brand]: finalData.model },
+      field_options: { colour: finalData.colour },
+    });
+    return settled;
+  };
+
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    e?.preventDefault?.();
     if (!validateAndScroll()) return;
 
     // Only admin can make changes to completed or billed orders
@@ -320,62 +468,18 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       return;
     }
 
-    const receivedAtDate = new Date(formData.receivedAt);
-    const expectedCompletionDate = new Date(formData.expectedCompletionAt);
-    if (Number.isNaN(receivedAtDate.getTime()) || Number.isNaN(expectedCompletionDate.getTime())) {
-      setError('Please provide valid datetime values for received and expected completion');
-      return;
-    }
-
     setSaveStatus('saving');
     setError('');
     try {
-      const finalData = { ...formData, createdBy: currentUser?.uid || '' };
-      if (finalData.brand === 'Other') {
-        finalData.brand = finalData.customBrand;
-      }
-      delete finalData.customBrand;
-      delete finalData.complaintNature;
-      delete finalData.customComplaint;
-      delete finalData.imei;
-      if (!finalData.complaintTypes.includes('Other')) {
-        finalData.otherComplaint = '';
-      }
-
-      if (!initialData) {
-        recordTacIfNew(finalData.imei1, finalData.brand, finalData.model, currentUser?.uid);
-      }
-
-      if (userRole?.toLowerCase() === 'staff') {
-        finalData.technicianName = userName || currentUser?.displayName || currentUser?.email || '';
-        finalData.technicianUid = currentUser?.uid || '';
-      } else if (userRole?.toLowerCase() === 'admin') {
-        const selectedTech = staffOptions.find(u => u.uid === finalData.technicianUid);
-        finalData.technicianName = selectedTech?.name || finalData.technicianName || currentUser?.displayName || currentUser?.email || '';
-        finalData.technicianUid = finalData.technicianUid || currentUser?.uid || '';
-      } else {
-        finalData.technicianName = userName || currentUser?.displayName || currentUser?.email || '';
-        finalData.technicianUid = currentUser?.uid || '';
-      }
-
-      finalData.alternatePhone = formData.alternatePhone || '';
-      finalData.receivedAt = receivedAtDate;
-      finalData.expectedCompletionAt = expectedCompletionDate;
-      if (finalData.lockType !== 'Pattern') finalData.lockPattern = [];
-      if (!['PIN', 'Password', 'Other'].includes(finalData.lockType)) finalData.lockHint = '';
-
-      finalData.serviceProfit = (Number(formData.estimatedPrice) || 0) -
-        (Number(formData.rawMaterialCost) || 0) -
-        (Number(formData.outsideLabourCost) || 0);
-
-      if (localId) finalData.id = localId;
-
-      const newId = await onSave(finalData);
+      const finalData = buildFinalData();
+      const { id: newId, orderNumber } = readSaveResult(await onSave(finalData));
       if (newId) setLocalId(newId);
       setSaveStatus('saved');
+      return noteSaved(finalData, orderNumber);
     } catch (err) {
       setError(err.message);
       setSaveStatus('idle');
+      return null;
     }
   };
 
@@ -389,48 +493,13 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       const finalSerialNumber = generateSerialNumber();
 
       // Step 2: Save service order to Firestore
-      const finalData = { ...formData, createdBy: currentUser?.uid || '' };
-      if (finalData.brand === 'Other') {
-        finalData.brand = finalData.customBrand;
-      }
-      delete finalData.customBrand;
-      delete finalData.complaintNature;
-      delete finalData.customComplaint;
-      delete finalData.imei;
-      if (!finalData.complaintTypes.includes('Other')) {
-        finalData.otherComplaint = '';
-      }
-
-      if (!initialData) {
-        recordTacIfNew(finalData.imei1, finalData.brand, finalData.model, currentUser?.uid);
-      }
-
-      if (userRole?.toLowerCase() === 'staff') {
-        finalData.technicianName = userName || currentUser?.displayName || currentUser?.email || '';
-        finalData.technicianUid = currentUser?.uid || '';
-      } else if (userRole?.toLowerCase() === 'admin') {
-        const selectedTech = staffOptions.find(u => u.uid === finalData.technicianUid);
-        finalData.technicianName = selectedTech?.name || finalData.technicianName || currentUser?.displayName || currentUser?.email || '';
-        finalData.technicianUid = finalData.technicianUid || currentUser?.uid || '';
-      } else {
-        finalData.technicianName = userName || currentUser?.displayName || currentUser?.email || '';
-        finalData.technicianUid = currentUser?.uid || '';
-      }
-
-      finalData.alternatePhone = formData.alternatePhone || '';
-      finalData.receivedAt = new Date(formData.receivedAt);
-      finalData.expectedCompletionAt = new Date(formData.expectedCompletionAt);
-      if (finalData.lockType !== 'Pattern') finalData.lockPattern = [];
-      if (!['PIN', 'Password', 'Other'].includes(finalData.lockType)) finalData.lockHint = '';
-      finalData.serviceProfit = (Number(formData.estimatedPrice) || 0) -
-        (Number(formData.rawMaterialCost) || 0) -
-        (Number(formData.outsideLabourCost) || 0);
+      const finalData = buildFinalData();
       finalData.serialNumber = finalSerialNumber;
 
-      if (localId) finalData.id = localId;
-
-      const savedDocId = await onSave(finalData);
+      const { id: savedDocId, orderNumber } = readSaveResult(await onSave(finalData));
       if (savedDocId) setLocalId(savedDocId);
+      const settled = noteSaved(finalData, orderNumber);
+      finalData.orderNumber = settled.orderNumber || finalData.orderNumber || '';
 
       // Step 3: Auto assign next label number
       const nextLabel = await getLabelNumber();
@@ -526,25 +595,49 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     }
   };
 
-  const handlePrintJobCard = () => {
+  /* Saved, by either path. Both spellings are in use because Save & Print
+     reports its label number through the same field. */
+  /* Saved AND untouched since. The old test was on saveStatus alone, which
+     stayed 'saved' while someone carried on typing - so the button sat there
+     reading "Saved ✓" over a form full of changes that were not saved at all,
+     and would not let you press it to save them. */
+  const exists = Boolean(initialData || localId);
+  const dirty = savedSnapshot === null || savedSnapshot !== JSON.stringify(formData);
+  const justSaved = !dirty;
+  const busy = saveStatus === 'saving' || isProcessing || uploading;
+
+  /* Printing saves first. Being unable to print a job card until the order had
+     been saved by a separate button was the same mistake the purchase
+     declaration made: the paper the customer is handed is the point, and the
+     save is bookkeeping that should happen on the way there. */
+  const handlePrintJobCard = async () => {
+    if (!validateAndScroll()) return;
+    /* Only write if there is something to write: printing an unchanged order
+       should cost neither a save nor a bumped updatedAt. What comes back is the
+       form including the order number the save just minted - reading formData
+       here instead would print the version from before it arrived. */
+    const saved = dirty ? await handleSubmit() : null;
+    if (dirty && !saved) return;
+    const source = saved || formData;
+
     const orderData = {
-      orderNumber: formData.orderNumber || initialData?.orderNumber || '',
-      customerName: formData.customerName,
-      customerPhone: formData.customerPhone,
-      alternatePhone: formData.alternatePhone,
-      brand: formData.brand,
-      model: formData.model,
-      colour: formData.colour,
-      imei1: formData.imei1,
-      imei2: formData.imei2,
-      lockType: formData.lockType,
-      technicianName: formData.technicianName,
-      complaintTypes: formData.complaintTypes,
-      otherComplaint: formData.otherComplaint,
-      problemDetails: formData.problemDetails,
-      accessoriesCollected: formData.accessories,
-      estimatedPrice: formData.estimatedPrice,
-      advancePaid: formData.advancePaid,
+      orderNumber: source.orderNumber || initialData?.orderNumber || '',
+      customerName: source.customerName,
+      customerPhone: source.customerPhone,
+      alternatePhone: source.alternatePhone,
+      brand: source.brand,
+      model: source.model,
+      colour: source.colour,
+      imei1: source.imei1,
+      imei2: source.imei2,
+      lockType: source.lockType,
+      technicianName: source.technicianName,
+      complaintTypes: source.complaintTypes,
+      otherComplaint: source.otherComplaint,
+      problemDetails: source.problemDetails,
+      accessoriesCollected: source.accessories,
+      estimatedPrice: source.estimatedPrice,
+      advancePaid: source.advancePaid,
       assignedLabelNumber: assignedLabelNumber
     }
     const html = generateServiceJobCard(orderData, shopDetails)
@@ -593,13 +686,15 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
   const advance = Number(formData.advancePaid) || 0;
   const previewProfit = estPrice - materialCost - labourCost;
 
-  try {
     return (
       <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center animate-fade-in">
-        <div className="bg-[#f1f5f9] w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col h-[94dvh] md:h-auto md:max-h-[90vh] overflow-hidden">
+        <div
+          {...sheetProps}
+          className="bg-[#f1f5f9] w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col h-[94dvh] md:h-auto md:max-h-[90vh] overflow-hidden"
+        >
 
-          {/* Grab handle */}
-          <div className="md:hidden flex justify-center pt-2.5 pb-1 flex-shrink-0 bg-white">
+          {/* Grab handle - drag it down to close */}
+          <div {...handleProps} aria-label="Drag down to close" className="md:hidden flex justify-center pt-2.5 pb-2 flex-shrink-0 bg-white">
             <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
           </div>
 
@@ -618,7 +713,7 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
               </div>
               <button
                 type="button"
-                onClick={onCancel}
+                onClick={discardAndClose}
                 className="w-10 h-10 rounded-full flex items-center justify-center text-gray-400 active:bg-gray-100 shrink-0"
                 aria-label="Close"
               >
@@ -628,7 +723,27 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
           </div>
 
           {/* Scrollable content */}
-          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 space-y-3">
+
+            {/* Say so, rather than silently showing someone a form that is not
+                as empty as they expect. */}
+            {restoredDraft && (
+              <div className="bg-[#002395]/5 border border-[#002395]/20 rounded-2xl px-4 py-3 flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-[#0f172a]">Picked up where you left off</p>
+                  <p className="text-xs text-[#64748b] mt-0.5 leading-relaxed">
+                    This intake still had your unsaved details from last time.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={startFresh}
+                  className="text-xs font-bold text-[#002395] shrink-0 py-1"
+                >
+                  Start empty
+                </button>
+              </div>
+            )}
 
             {error && (
               <div className="bg-red-50 border border-red-200 text-[#ED2939] px-4 py-3 rounded-2xl text-sm font-medium">
@@ -641,69 +756,43 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
               <div className="space-y-3">
                 <div ref={brandRef}>
                   <label className={labelClass}>Brand <span className="text-[#ED2939]">*</span></label>
-                  <select required value={formData.brand} onChange={e => {
-                    const selectedBrand = e.target.value
-                    setFormData(prev => ({ ...prev, brand: selectedBrand, model: '' }))
-                    setCustomModel('')
-                    setIsCustomModel(false)
-                    if (fieldErrors.brand) setFieldErrors(prev => ({...prev, brand: ''}))
-                  }} className={`${inputClass} ${fieldErrors.brand ? errorInput : ''}`}>
-                    <option value="">Select Brand</option>
-                    {BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
-                  </select>
-                  {formData.brand === 'Other' && (
-                    <input type="text" placeholder="Enter Custom Brand" required value={formData.customBrand || ''} onChange={e => setFormData({ ...formData, customBrand: e.target.value })} className={`${inputClass} mt-2`} />
-                  )}
-                  <FieldError message={fieldErrors.brand} />
+                  <ComboBox
+                    required
+                    value={formData.brand}
+                    options={BRANDS}
+                    placeholder="Select or type a brand"
+                    error={fieldErrors.brand}
+                    onChange={v => {
+                      setFormData(prev => ({ ...prev, brand: v, model: '' }))
+                      if (fieldErrors.brand) setFieldErrors(prev => ({...prev, brand: ''}))
+                    }}
+                  />
                 </div>
 
                 <div ref={modelRef}>
                   <label className={labelClass}>Model <span className="text-[#ED2939]">*</span></label>
-                  <select
+                  <ComboBox
                     required
-                    value={isCustomModel ? '__custom__' : formData.model}
-                    onChange={e => {
-                      if (e.target.value === '__custom__') {
-                        setIsCustomModel(true)
-                        setFormData(prev => ({ ...prev, model: '' }))
-                      } else {
-                        setIsCustomModel(false)
-                        setCustomModel('')
-                        setFormData(prev => ({ ...prev, model: e.target.value }))
-                      }
+                    value={formData.model}
+                    options={MODELS[formData.brand] || []}
+                    disabled={!formData.brand}
+                    placeholder={formData.brand ? 'Select or type a model' : 'Select brand first'}
+                    error={fieldErrors.model}
+                    onChange={v => {
+                      setFormData(prev => ({ ...prev, model: v }))
                       if (fieldErrors.model) setFieldErrors(prev => ({...prev, model: ''}))
                     }}
-                    disabled={!formData.brand}
-                    className={`${inputClass} disabled:bg-gray-50 disabled:text-gray-400 ${fieldErrors.model ? errorInput : ''}`}
-                  >
-                    <option value="" disabled>{formData.brand ? 'Select model' : 'Select brand first'}</option>
-                    {formData.brand && (MODELS[formData.brand] || []).length === 0 && (
-                      <option value="" disabled>No models available</option>
-                    )}
-                    {(MODELS[formData.brand] || []).map(m => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                    <option value="__custom__">Other (type manually)</option>
-                  </select>
-                  {isCustomModel && (
-                    <input
-                      type="text"
-                      placeholder="Type model name"
-                      value={customModel}
-                      onChange={e => {
-                        setCustomModel(e.target.value)
-                        setFormData(prev => ({ ...prev, model: e.target.value }))
-                        if (fieldErrors.model) setFieldErrors(prev => ({...prev, model: ''}))
-                      }}
-                      className={`${inputClass} mt-2`}
-                    />
-                  )}
-                  <FieldError message={fieldErrors.model} />
+                  />
                 </div>
 
                 <div>
                   <label className={labelClass}>Colour</label>
-                  <input type="text" value={formData.colour} onChange={e => setFormData({ ...formData, colour: e.target.value })} className={inputClass} />
+                  <ComboBox
+                    value={formData.colour}
+                    options={fieldOptions.colour || []}
+                    placeholder="Select or type a colour"
+                    onChange={v => setFormData(prev => ({ ...prev, colour: v }))}
+                  />
                 </div>
 
                 <div ref={imei1Ref}>
@@ -1024,8 +1113,8 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
                 )}
                 {formData.lockType === 'Pattern' && (
                   <div>
-                    <label className={labelClass}>Draw pattern</label>
-                    <div className="bg-gray-50 p-4 rounded-xl border border-[#e2e8f0] flex justify-center">
+                    <label className={labelClass}>Unlock pattern</label>
+                    <div className="flex justify-center">
                       <Suspense fallback={<div className="text-sm text-gray-400">Loading pattern lock...</div>}>
                         <PatternLock
                           value={formData?.lockPattern || []}
@@ -1054,52 +1143,56 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
 
           </div>
 
-          {/* Footer */}
-          <div className="flex-shrink-0 px-4 py-3 border-t border-gray-100 bg-white pb-safe space-y-2">
+          {/* ── FOOTER ──
+              One thing to do, and quieter ways to do the rest. This was four
+              filled buttons in three different colours - blue, green and amber -
+              stacked at the bottom of the form, with nothing to say which was
+              the one you wanted. The paperwork actions save on their way to the
+              printer, so none of them has to be unlocked by pressing something
+              else first. */}
+          <div className="flex-shrink-0 px-4 py-3 border-t border-gray-100 bg-white pb-safe">
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={saveStatus === 'saving' || uploading || saveStatus.includes('saved') || saveStatus.includes('Saved')}
+              disabled={busy || justSaved}
               className="w-full bg-[#002395] text-white rounded-xl py-3.5 text-sm font-bold disabled:opacity-50"
             >
-              {saveStatus === 'saving' ? 'Saving...' : saveStatus.includes('saved') || saveStatus.includes('Saved') ? 'Saved ✓' : initialData ? 'Save Changes' : 'Create Order'}
+              {saveStatus === 'saving' ? 'Saving…'
+                : justSaved ? 'Saved ✓'
+                  : exists ? 'Save changes' : 'Create order'}
             </button>
 
-            <div className="flex gap-2">
+            {!initialData && (
               <button
                 type="button"
-                onClick={onCancel}
-                className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-3 text-sm font-bold"
+                onClick={handleSaveAndPrint}
+                disabled={busy || saveStatus.includes('Assigned ✓')}
+                className="w-full mt-2 border border-[#002395] text-[#002395] rounded-xl py-3 text-sm font-bold disabled:opacity-50"
+              >
+                {isProcessing ? 'Printing…'
+                  : saveStatus.includes('Assigned ✓') ? `Label #${assignedLabelNumber} printed ✓`
+                    : 'Save and print the label'}
+              </button>
+            )}
+
+            <div className="flex items-center justify-center gap-4 mt-2.5">
+              <button
+                type="button"
+                onClick={discardAndClose}
+                className="text-[13px] font-semibold text-[#64748b] py-1.5"
               >
                 Cancel
               </button>
-              {!initialData && (
-                <button
-                  type="button"
-                  onClick={handleSaveAndPrint}
-                  disabled={isProcessing || saveStatus.includes('Assigned ✓')}
-                  className="flex-[2] bg-green-600 text-white rounded-xl py-3 text-sm font-bold disabled:opacity-50"
-                >
-                  {isProcessing ? (
-                    <span><i className="fas fa-spinner fa-spin mr-2"></i>Processing...</span>
-                  ) : saveStatus.includes('Assigned ✓') ? (
-                    <span>Done ✓</span>
-                  ) : (
-                    <span><i className="fas fa-print mr-2"></i>Save &amp; Print</span>
-                  )}
-                </button>
-              )}
-            </div>
-
-            {(saveStatus === 'saved' || saveStatus.includes('Assigned ✓') || initialData) && (
+              <span aria-hidden="true" className="text-[#e2e8f0]">·</span>
               <button
                 type="button"
                 onClick={handlePrintJobCard}
-                className="w-full bg-amber-500 text-white rounded-xl py-3 text-sm font-bold"
+                disabled={busy}
+                className="text-[13px] font-semibold text-[#002395] py-1.5 disabled:opacity-50"
               >
-                <i className="fas fa-file-alt mr-2"></i> Print Job Card
+                Print job card
               </button>
-            )}
+            </div>
           </div>
         </div>
 
@@ -1113,16 +1206,6 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
 
       </div>
     );
-  } catch (err) {
-    console.error("Error rendering ServiceOrderForm:", err);
-    return (
-      <div className="p-4 md:p-8 text-center text-red-600 bg-red-50 rounded-lg break-words">
-        <h3 className="font-bold mb-2">Something went wrong.</h3>
-        <p>Please refresh the page or contact support if the issue persists.</p>
-        <p className="text-xs mt-2 text-red-400">{err.message}</p>
-      </div>
-    );
-  }
 };
 
 export default ServiceOrderForm;

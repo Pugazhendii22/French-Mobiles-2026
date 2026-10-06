@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { doc, getDoc, updateDoc, collection, query, where, limit, getDocs } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { creditWallet } from '../../utils/walletUtils';
 import { loadCustomers, rememberCustomer } from '../../utils/customerCache';
 import CustomerForm from './CustomerForm';
-import Layout from '../../components/common/Layout';
-import ImageModal from '../../components/common/ImageModal';
-import { imageThumb } from '../../utils/imageUrl';
-import { openWhatsApp } from '../../utils/phone';
+import Layout from '@/shared/ui/Layout';
+import ImageModal from '@/shared/ui/ImageModal';
+import { imageThumb } from '@/shared/lib/imageUrl';
+import { openWhatsApp } from '@/shared/lib/phone';
+import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 
 const CustomerView = () => {
   const { id } = useParams();
@@ -19,6 +20,8 @@ const CustomerView = () => {
   const quickData = location.state;
 
   const [customer, setCustomer] = useState(quickData || null);
+  const { sheetProps: editSheet, handleProps: editHandle, scrollRef: editScroll } = useSheetDismiss({ onDismiss: () => setShowEdit(false) });
+  const { sheetProps: walletSheet, handleProps: walletHandle } = useSheetDismiss({ onDismiss: () => setShowAddWallet(false) });
   const [loading, setLoading] = useState(!quickData);
   const [showEdit, setShowEdit] = useState(false);
   const [showImage, setShowImage] = useState({});
@@ -540,8 +543,8 @@ const CustomerView = () => {
     {/* EDIT MODAL */}
     {showEdit && (
       <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center">
-        <div className="bg-white w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col max-h-[90vh]">
-          <div className="md:hidden flex justify-center pt-3 pb-1 flex-shrink-0">
+        <div {...editSheet} className="bg-white w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col max-h-[90vh]">
+          <div {...editHandle} aria-label="Drag down to close" className="md:hidden flex justify-center pt-3 pb-1 flex-shrink-0">
             <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
           </div>
           <div className="flex-shrink-0 px-4 pt-3 pb-3 border-b border-gray-100">
@@ -552,7 +555,7 @@ const CustomerView = () => {
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto px-4 py-4">
+          <div ref={editScroll} className="flex-1 overflow-y-auto px-4 py-4">
             <CustomerForm
               initialData={customer}
               onSave={handleUpdate}
@@ -566,8 +569,8 @@ const CustomerView = () => {
       {/* ADD WALLET MODAL */}
       {showAddWallet && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center">
-          <div className="bg-white w-full md:max-w-sm md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col">
-            <div className="md:hidden flex justify-center pt-3 pb-1">
+          <div {...walletSheet} className="bg-white w-full md:max-w-sm md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col">
+            <div {...walletHandle} aria-label="Drag down to close" className="md:hidden flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
             </div>
             <div className="flex-shrink-0 px-4 pt-3 pb-3 border-b border-gray-100">

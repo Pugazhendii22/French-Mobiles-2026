@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import BarcodeScannerModal from '../../components/common/BarcodeScannerModal';
-import { lookupLabel } from '../../utils/lookupLabel';
-import { lookupTac } from '../../utils/tacLookup';
+import BarcodeScannerModal from '@/shared/components/BarcodeScannerModal';
+import { lookupLabel } from '@/features/labels/data';
+import { lookupTac } from '@/features/labels/tacLookup';
 
 /* A scanned label should open the record itself, not a read-only summary of it,
    so staff land somewhere they can actually act (sell, complete, edit, print). */

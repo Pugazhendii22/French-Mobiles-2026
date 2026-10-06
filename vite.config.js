@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -76,6 +77,16 @@ export default defineConfig({
       }
     })
   ],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
+  test: {
+    environment: 'node',
+    // .jsx too: a render test written for a later slice must not be skipped silently
+    include: ['src/**/*.test.{js,jsx}'],
+  },
   build: {
     rollupOptions: {
       output: {

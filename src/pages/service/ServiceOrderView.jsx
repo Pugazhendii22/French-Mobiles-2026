@@ -1,29 +1,37 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
-import { db, auth } from '../../firebase/firebase';
+import { db, auth } from '@/shared/firebase/firebase';
 import ServiceOrderForm from './ServiceOrderForm';
-import PatternLock from '../../components/PatternLock';
-import { getLabelNumber } from '../../utils/getLabelNumber';
+import PatternLock from '@/shared/components/PatternLock';
+import { getLabelNumber } from '@/features/labels/data';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import NewSaleModal from '../../components/sales/NewSaleModal';
-import { generateLabelHTML } from '../../utils/printLabel.jsx';
+import { generateLabelHTML } from '@/features/labels/printing/printLabel';
 import { creditWallet } from '../../utils/walletUtils';
 import { generateServiceJobCard } from '../../utils/generateServiceJobCard';
 import { generateServiceFinalBill } from '../../utils/generateServiceFinalBill';
-import PrinterSelector from '../../components/PrinterSelector';
-import ImageModal from '../../components/common/ImageModal';
-import Layout from '../../components/common/Layout';
-import { Section, InfoRow, InfoGrid, Chip } from '../../components/common/ui';
-import ConfirmDeleteModal from '../../components/ConfirmDeleteModal';
-import { imageThumb } from '../../utils/imageUrl';
-import { describeFirebaseError } from '../../utils/firebaseError';
-import { openWhatsApp as openWhatsAppChat } from '../../utils/phone';
-import { serviceOrderLabelData, syncLabelSnapshot, withLiveLabelData } from '../../utils/labelSync';
+import PrinterSelector from '@/features/labels/printing/PrinterSelector';
+import ImageModal from '@/shared/ui/ImageModal';
+import Layout from '@/shared/ui/Layout';
+import { Section, InfoRow, InfoGrid, Chip } from '@/shared/ui/ui';
+import ConfirmDeleteModal from '@/shared/ui/ConfirmDeleteModal';
+import { imageThumb } from '@/shared/lib/imageUrl';
+import { describeFirebaseError } from '@/shared/firebase/firebaseError';
+import { openWhatsApp as openWhatsAppChat } from '@/shared/lib/phone';
+import { serviceOrderLabelData, syncLabelSnapshot, withLiveLabelData } from '@/features/labels/data';
+import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
+import { STATUSES, stateMetaOf } from '@/features/service/orderState';
+import { checklistEntries, blankChecklist, allChecked } from '@/features/service/checklist';
 
-const STATUSES = ['Received', 'In Progress', 'Parts Awaiting', 'Awaiting Customer Approval', 'Returned'];
-const NON_COMPLETED_STATUSES = ['Received', 'In Progress', 'Parts Awaiting', 'Awaiting Customer Approval', 'Returned'];
+/* Everything but Completed: finishing an order goes through the pre-delivery
+   checklist, never a dropdown. Derived from the one shared list rather than
+   spelled out again - this file used to carry two identical copies, one of
+   which nothing read. */
+const NON_COMPLETED_STATUSES = STATUSES.filter(s => s !== 'Completed');
+
+const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
 const ServiceOrderView = () => {
   const { id } = useParams();
@@ -31,6 +39,18 @@ const ServiceOrderView = () => {
   const { userRole, currentUser, userName } = useAuth();
   const { shopDetails, preDeliveryChecklist = [] } = useSettings();
   const [order, setOrder] = useState(null);
+
+  /* These short dialogs have no grab handle, so no handle is added: the whole
+     dialog answers a downward swipe instead. They have nothing to scroll, so
+     the gesture cannot be confused with scrolling. */
+  const { sheetProps: billSheet } = useSheetDismiss({ onDismiss: () => setBillModalOpen(false) });
+  /* Wrapped, not passed bare. `handleSkipRating` is a const declared further
+     down this component, so naming it here evaluates it during render - before
+     it exists - and the page dies with "Cannot access 'handleSkipRating' before
+     initialization". The arrow defers the lookup to the moment the sheet is
+     actually dismissed. */
+  const { sheetProps: ratingSheet } = useSheetDismiss({ onDismiss: () => handleSkipRating() });
+  const { sheetProps: doneSheet, handleProps: doneHandle, scrollRef: doneScroll } = useSheetDismiss({ onDismiss: () => setShowCompleteModal(false) });
   const [loading, setLoading] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
@@ -56,13 +76,6 @@ const ServiceOrderView = () => {
   const [viewerTitle, setViewerTitle] = useState('');
 
   const [showCompleteModal, setShowCompleteModal] = useState(false);
-  const normalizeChecklistKey = (label) => label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-  const createChecklist = (items = []) => {
-    return items.reduce((acc, item) => {
-      acc[normalizeChecklistKey(item)] = false
-      return acc
-    }, {})
-  }
   const [completeChecklist, setCompleteChecklist] = useState({});
   const [completeError, setCompleteError] = useState('');
 
@@ -72,20 +85,25 @@ const ServiceOrderView = () => {
   const [ratingDataForModal, setRatingDataForModal] = useState(null);
   const [ratingGenerating, setRatingGenerating] = useState(false);
 
+  /* Blanked when the sheet opens, and only then. The settings list was in the
+     dependencies, and the context hands out a fresh array whenever no checklist
+     is configured - so this could fire mid-tick and wipe what had been ticked.
+     An item added to settings while the sheet is open simply renders unticked,
+     which is what it should be. */
   useEffect(() => {
-    if (showCompleteModal) {
-      setCompleteChecklist(createChecklist(preDeliveryChecklist));
-      setCompleteError('');
-    }
-  }, [showCompleteModal, preDeliveryChecklist]);
+    if (!showCompleteModal) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCompleteChecklist(blankChecklist(preDeliveryChecklist));
+    setCompleteError('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCompleteModal]);
 
   const handleCompleteToggle = (key) => {
     setCompleteChecklist(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   const handleConfirmComplete = async () => {
-    const allChecked = Object.values(completeChecklist).every(val => val === true);
-    if (!allChecked) {
+    if (!allChecked(preDeliveryChecklist, completeChecklist)) {
       setCompleteError('Please complete all checklist items before marking as complete');
       return;
     }
@@ -551,53 +569,108 @@ const ServiceOrderView = () => {
 
   const showStatusSelect = canChangeStatus && order?.status !== 'Completed';
 
-  try {
+  /* The same three-state colour the job sheet uses, so the spine down the left
+     of this page means what it meant in the list you arrived from. */
+  const heroState = stateMetaOf(order);
+
+  const balanceDue = Math.max(
+    0,
+    (Number(order?.estimatedPrice) || 0) - (Number(order?.advancePaid) || 0),
+  );
+
+  /* Named once. Each was spelled out inline at its own button, slightly
+     differently each time. */
+  const canComplete = (isAdmin || order?.technicianUid === currentUser?.uid) && !isCompleted;
+  const canEditOrder = isAdmin || (order?.technicianUid === currentUser?.uid && !isCompletedBill);
+
     return (
       <Layout title="Service Order" pageType="detail" backTo="/service">
         <div className="max-w-3xl mx-auto space-y-3">
 
-          {/* ── HERO ── */}
-          <div className={`bg-white rounded-2xl shadow-sm border-l-4 p-4 ${
-            order?.status === 'Completed' ? 'border-green-500' : 'border-[#002395]'
-          }`}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-bold text-[#002395] font-mono truncate">{order?.orderNumber}</p>
-                <h2 className="text-lg font-bold text-[#0f172a] mt-0.5 leading-tight">{order?.customerName}</h2>
-                {order?.customerPhone && (
-                  <a href={`tel:${order.customerPhone}`} className="inline-flex items-center gap-1.5 text-green-600 font-semibold text-sm mt-1">
-                    <i className="fas fa-phone text-xs"></i>{order.customerPhone}
-                  </a>
-                )}
-                {order?.alternatePhone && (
-                  <a href={`tel:${order.alternatePhone}`} className="flex items-center gap-1.5 text-green-600 font-semibold text-sm mt-0.5">
-                    <i className="fas fa-phone text-xs"></i>{order.alternatePhone}
-                  </a>
-                )}
+          {/* ── HERO ──
+              What someone needs before they do anything: who it is, what came
+              in, whether it is late, and what the money is. Then one thing to
+              do, and quieter ways to do the rest.
+
+              This was up to nine filled buttons in eight colours - blue, green,
+              blue-tint, amber, red, grey, emerald, yellow, purple - stacked
+              under the status. Every one of them shouted equally, so none of
+              them read as the thing you came here for. They are all still here;
+              only one of them is loud. */}
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+
+            <div className="relative p-4">
+              <span
+                aria-hidden="true"
+                className="absolute left-0 top-0 bottom-0 w-[3px]"
+                style={{ background: heroState.spine }}
+              />
+
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] font-bold text-[#002395] font-mono">{order?.orderNumber}</span>
+                    {isOverdue && (
+                      <span className="text-[10px] font-bold text-[#ED2939]">
+                        Overdue{expectedCompletionDate ? ` · due ${expectedCompletionDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}
+                      </span>
+                    )}
+                    {isCompleted && (
+                      <span className="text-[10px] font-semibold text-[#94a3b8]">Finished</span>
+                    )}
+                  </div>
+
+                  <h2 className="text-lg font-bold text-[#0f172a] mt-0.5 leading-tight truncate">{order?.customerName}</h2>
+
+                  <div className="flex items-center gap-3 flex-wrap mt-1">
+                    {order?.customerPhone && (
+                      <a href={`tel:${order.customerPhone}`} className="inline-flex items-center gap-1.5 text-green-600 font-semibold text-sm">
+                        <i className="fas fa-phone text-xs" aria-hidden="true"></i>{order.customerPhone}
+                      </a>
+                    )}
+                    {order?.alternatePhone && (
+                      <a href={`tel:${order.alternatePhone}`} className="inline-flex items-center gap-1.5 text-green-600 font-semibold text-sm">
+                        <i className="fas fa-phone text-xs" aria-hidden="true"></i>{order.alternatePhone}
+                      </a>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="text-right shrink-0">
-                <p className="text-xl font-bold text-[#002395] leading-tight">₹{order?.estimatedPrice}</p>
-                {order?.advancePaid > 0 && (
-                  <p className="text-[11px] text-green-600 font-semibold mt-0.5">Advance ₹{order?.advancePaid}</p>
+
+              <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+                <Chip className="bg-gray-100 text-gray-700">{order?.brand} {order?.model}</Chip>
+                {order?.colour && <Chip>{order?.colour}</Chip>}
+                {labelEntry && (
+                  <Chip className="bg-[#002395]/10 text-[#002395]"><i className="fas fa-tag mr-1" aria-hidden="true"></i>#{labelEntry.labelNumber}</Chip>
                 )}
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-              <Chip className="bg-gray-100 text-gray-700">{order?.brand} {order?.model}</Chip>
-              {order?.colour && <Chip>{order?.colour}</Chip>}
-              {labelEntry && (
-                <Chip className="bg-[#002395]/10 text-[#002395]"><i className="fas fa-tag mr-1"></i>#{labelEntry.labelNumber}</Chip>
-              )}
+            {/* The three figures the customer asks about, in the order they ask:
+                what it costs, what they have already handed over, what is left. */}
+            <div className="flex items-stretch border-t border-[#f1f4f9] divide-x divide-[#f1f4f9] px-4">
+              <div className="flex-1 py-3">
+                <p className="text-[11px] text-[#64748b]">Estimate</p>
+                <p className="text-[15px] font-bold tabular-nums text-[#0f172a] mt-0.5">{money(order?.estimatedPrice)}</p>
+              </div>
+              <div className="flex-1 py-3 pl-3">
+                <p className="text-[11px] text-[#64748b]">Advance paid</p>
+                <p className="text-[15px] font-bold tabular-nums text-green-700 mt-0.5">{money(order?.advancePaid)}</p>
+              </div>
+              <div className="flex-1 py-3 pl-3">
+                <p className="text-[11px] text-[#64748b]">Balance</p>
+                <p className="text-[15px] font-bold tabular-nums text-[#0f172a] mt-0.5">{money(balanceDue)}</p>
+              </div>
             </div>
 
             {/* Status is the thing that changes most, so it gets its own control */}
-            <div className="mt-3">
+            <div className="px-4 py-3 border-t border-[#f1f4f9]">
               {showStatusSelect ? (
                 <select
                   value={order?.status}
                   onChange={handleStatusChange}
                   disabled={updatingStatus}
+                  aria-label="Order status"
                   className={`w-full text-sm px-3 py-3 rounded-xl border-0 font-bold focus:outline-none ${statusColors}`}
                 >
                   {filteredStatusOptions.map(status => (
@@ -611,45 +684,41 @@ const ServiceOrderView = () => {
               )}
             </div>
 
-            {/* ── ACTIONS, grouped by importance instead of one chip wall ── */}
-            <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
-              {(userRole?.toLowerCase() === 'admin' || order?.technicianUid === currentUser?.uid) && order?.status !== 'Completed' && (
+            <div className="px-4 py-3 border-t border-[#f1f4f9]">
+              {/* The one thing this page is for, which depends on where the
+                  order has got to: finish the repair, then bill it. */}
+              {canComplete && (
                 <button
                   onClick={() => setShowCompleteModal(true)}
                   disabled={updatingStatus}
-                  className="w-full bg-[#002395] text-white py-3 rounded-xl text-sm font-bold disabled:opacity-50"
+                  className="w-full bg-[#002395] text-white py-3 rounded-xl text-[15px] font-bold disabled:opacity-50"
                 >
-                  <i className="fas fa-check-circle mr-2"></i>Complete Service
+                  Complete this service
                 </button>
               )}
 
-              {order?.status === 'Completed' && !order?.billCreated && (
+              {isCompleted && !order?.billCreated && (
                 <button
                   onClick={handleCreateBill}
-                  className="w-full bg-green-600 text-white py-3 rounded-xl text-sm font-bold"
+                  className="w-full bg-[#16a34a] text-white py-3 rounded-xl text-[15px] font-bold"
                 >
-                  <i className="fas fa-receipt mr-2"></i>Create Bill
+                  Create the bill
                 </button>
               )}
 
-              <div className="flex gap-2">
-                {(isAdmin || (order?.technicianUid === currentUser?.uid && !isCompletedBill)) && (
-                  <button
-                    onClick={() => setShowEdit(true)}
-                    className="flex-1 bg-[#002395]/10 text-[#002395] py-2.5 rounded-xl text-xs font-bold"
-                  >
-                    <i className="fas fa-edit mr-1.5"></i>Edit
+              {/* Everything else, in one quiet block. Nothing here competes
+                  with the button above, and nothing has been taken away. */}
+              <div className={`flex flex-wrap items-center justify-center gap-x-4 gap-y-1 ${(canComplete || (isCompleted && !order?.billCreated)) ? 'mt-3' : ''}`}>
+                {canEditOrder && (
+                  <button onClick={() => setShowEdit(true)} className="text-[13px] font-semibold text-[#002395] py-1.5">
+                    Edit details
                   </button>
                 )}
-                <button
-                  onClick={handlePrintJobCard}
-                  className="flex-1 bg-amber-50 text-amber-700 py-2.5 rounded-xl text-xs font-bold"
-                >
-                  <i className="fas fa-file-alt mr-1.5"></i>Job Card
-                </button>
-              </div>
 
-              <div className="flex gap-2">
+                <button onClick={handlePrintJobCard} className="text-[13px] font-semibold text-[#002395] py-1.5">
+                  Print job card
+                </button>
+
                 {labelEntry ? (
                   <button
                     onClick={() => {
@@ -657,59 +726,51 @@ const ServiceOrderView = () => {
                       setLabelHTML(html)
                       setShowPrinter(true)
                     }}
-                    className="flex-1 bg-[#ED2939]/10 text-[#ED2939] py-2.5 rounded-xl text-xs font-bold"
+                    className="text-[13px] font-semibold text-[#002395] py-1.5"
                   >
-                    <i className="fas fa-print mr-1.5"></i>Print #{labelEntry.labelNumber}
+                    Print label #{labelEntry.labelNumber}
                   </button>
                 ) : (
-                  <button
-                    onClick={openLabelDialog}
-                    className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-xl text-xs font-bold"
-                  >
-                    <i className="fas fa-tag mr-1.5"></i>Assign Label
+                  <button onClick={openLabelDialog} className="text-[13px] font-semibold text-[#002395] py-1.5">
+                    Assign a label
                   </button>
                 )}
-                {order?.status === 'Completed' && (
+
+                {isCompleted && (
+                  <button onClick={handlePrintFinalBill} className="text-[13px] font-semibold text-[#002395] py-1.5">
+                    Print final bill
+                  </button>
+                )}
+
+                {isCompleted && (
+                  <button onClick={openWhatsApp} className="text-[13px] font-semibold text-[#16a34a] py-1.5">
+                    WhatsApp the customer
+                  </button>
+                )}
+
+                {isCompleted && !order?.ratingToken && (
                   <button
-                    onClick={handlePrintFinalBill}
-                    className="flex-1 bg-emerald-50 text-emerald-700 py-2.5 rounded-xl text-xs font-bold"
+                    onClick={handleSendRating}
+                    disabled={generatingRating}
+                    className="text-[13px] font-semibold text-[#002395] py-1.5 disabled:opacity-50"
                   >
-                    <i className="fas fa-file-invoice mr-1.5"></i>Final Bill
+                    {generatingRating ? 'Preparing…' : 'Ask for a rating'}
+                  </button>
+                )}
+
+                {isCompleted && order?.billCreated && order?.linkedSaleId && (
+                  <button
+                    onClick={() => navigate(`/sales/${order?.linkedSaleId}`)}
+                    className="text-[13px] font-semibold text-[#002395] py-1.5"
+                  >
+                    View the bill
                   </button>
                 )}
               </div>
 
-              {order?.status === 'Completed' && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={openWhatsApp}
-                    className="flex-1 bg-green-50 text-green-700 py-2.5 rounded-xl text-xs font-bold"
-                  >
-                    <i className="fab fa-whatsapp mr-1.5"></i>WhatsApp
-                  </button>
-                  {!order?.ratingToken && (
-                    <button
-                      onClick={handleSendRating}
-                      disabled={generatingRating}
-                      className="flex-1 bg-yellow-50 text-yellow-700 py-2.5 rounded-xl text-xs font-bold disabled:opacity-50"
-                    >
-                      <i className="fas fa-star mr-1.5"></i>Rating
-                    </button>
-                  )}
-                  {order?.billCreated && order?.linkedSaleId && (
-                    <button
-                      onClick={() => navigate(`/sales/${order?.linkedSaleId}`)}
-                      className="flex-1 bg-purple-50 text-purple-700 py-2.5 rounded-xl text-xs font-bold"
-                    >
-                      <i className="fas fa-receipt mr-1.5"></i>View Bill
-                    </button>
-                  )}
-                </div>
-              )}
-
               {isCompletedBill && !isAdmin && (
-                <p className="flex items-center justify-center gap-1.5 bg-gray-100 text-gray-500 py-2.5 rounded-xl text-xs font-semibold">
-                  <i className="fas fa-lock"></i> Bill locked - admin only
+                <p className="text-center text-[12px] text-[#94a3b8] font-semibold mt-2.5">
+                  <i className="fas fa-lock mr-1.5" aria-hidden="true"></i>Billed - only an admin can change this now
                 </p>
               )}
             </div>
@@ -1069,8 +1130,8 @@ const ServiceOrderView = () => {
           {/* ── PRE-DELIVERY CHECKLIST ── */}
           {showCompleteModal && order && (
             <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center animate-fade-in">
-              <div className="bg-[#f1f5f9] w-full md:max-w-md md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col h-[90dvh] md:h-auto md:max-h-[90vh] overflow-hidden">
-                <div className="md:hidden flex justify-center pt-2.5 pb-1 bg-white">
+              <div {...doneSheet} className="bg-[#f1f5f9] w-full md:max-w-md md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col h-[90dvh] md:h-auto md:max-h-[90vh] overflow-hidden">
+                <div {...doneHandle} aria-label="Drag down to close" className="md:hidden flex justify-center pt-2.5 pb-1 bg-white">
                   <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
                 </div>
                 <div className="flex justify-between items-center px-4 pt-2 pb-3 border-b border-gray-100 bg-white">
@@ -1083,20 +1144,26 @@ const ServiceOrderView = () => {
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto min-h-0 px-3 py-3 space-y-3">
+                <div ref={doneScroll} className="flex-1 overflow-y-auto min-h-0 px-3 py-3 space-y-3">
                   {completeError && (
                     <div className="bg-red-50 border border-red-200 text-[#ED2939] px-4 py-3 rounded-2xl text-sm font-medium">
                       <i className="fas fa-exclamation-circle mr-2"></i>{completeError}
                     </div>
                   )}
                   <div className="bg-white rounded-2xl p-2 shadow-sm">
-                    {preDeliveryChecklist.map(item => {
-                      const key = normalizeChecklistKey(item)
+                    {/* A row is 60px tall with a gap between rows. These were
+                        48px targets touching each other, so a thumb aimed at one
+                        landed on its neighbour and unticked it. */}
+                    {checklistEntries(preDeliveryChecklist).map(({ item, key }) => {
                       const checked = !!completeChecklist[key]
                       return (
                         <label
                           key={key}
-                          className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition ${checked ? 'bg-green-50' : ''}`}
+                          className={`flex items-center gap-3 px-3 min-h-[60px] rounded-xl cursor-pointer transition border ${
+                            checked
+                              ? 'bg-green-50 border-green-200'
+                              : 'bg-white border-[#e2e8f0]'
+                          }`}
                         >
                           <input
                             type="checkbox"
@@ -1107,7 +1174,7 @@ const ServiceOrderView = () => {
                           <span className={`text-sm font-medium flex-1 ${checked ? 'text-[#0f172a]' : 'text-gray-600'}`}>
                             {item}
                           </span>
-                          {checked && <i className="fas fa-check-circle text-green-500"></i>}
+                          {checked && <i className="fas fa-check-circle text-green-500" aria-hidden="true"></i>}
                         </label>
                       )
                     })}
@@ -1141,7 +1208,7 @@ const ServiceOrderView = () => {
           {ratingModalOpen && ratingDataForModal && (
             <div className="fixed z-50 inset-0 bg-black/60 flex items-end md:items-center justify-center animate-fade-in">
               <div className="fixed inset-0" onClick={handleSkipRating}></div>
-              <div className="relative bg-white w-full md:max-w-md rounded-t-3xl md:rounded-2xl p-5 z-10 pb-safe">
+              <div {...ratingSheet} className="relative bg-white w-full md:max-w-md rounded-t-3xl md:rounded-2xl p-5 z-10 pb-safe">
                 <h3 className="text-lg font-bold text-[#0f172a] mb-1">Send Rating Link</h3>
                 <p className="text-gray-500 mb-3 text-sm">
                   <strong className="text-[#0f172a]">{ratingDataForModal.customerName}</strong>
@@ -1170,7 +1237,7 @@ const ServiceOrderView = () => {
           {billModalOpen && (completedOrderForBill || order) && (
             <div className="fixed z-50 inset-0 bg-black/60 flex items-end md:items-center justify-center animate-fade-in">
               <div className="fixed inset-0" onClick={() => setBillModalOpen(false)}></div>
-              <div className="relative bg-white w-full md:max-w-sm rounded-t-3xl md:rounded-2xl p-5 z-10 text-center pb-safe">
+              <div {...billSheet} className="relative bg-white w-full md:max-w-sm rounded-t-3xl md:rounded-2xl p-5 z-10 text-center pb-safe">
                 <div className="w-14 h-14 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-3">
                   <i className="fas fa-check text-xl"></i>
                 </div>
@@ -1198,19 +1265,6 @@ const ServiceOrderView = () => {
         </div>
       </Layout>
     );
-  } catch (err) {
-    console.error("Error rendering ServiceOrderView:", err);
-    return (
-      <Layout title="Error" pageType="detail" backTo="/service">
-        <div className="p-4 md:p-8 text-center text-red-600 bg-red-50 rounded-lg max-w-2xl mx-auto mt-10 break-words">
-          <h3 className="font-bold text-xl mb-2">Something went wrong</h3>
-          <p>The service order details could not be displayed due to an error.</p>
-          <p className="text-sm mt-4 text-red-500 font-mono bg-red-100 p-2 rounded text-left overflow-x-auto break-words">{err.toString()}</p>
-          <button onClick={() => window.location.reload()} className="mt-6 bg-red-600 text-white px-4 py-2 rounded break-words">Refresh Page</button>
-        </div>
-      </Layout>
-    );
-  }
 };
 
 export default ServiceOrderView;

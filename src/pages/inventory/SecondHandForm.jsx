@@ -1,20 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { collection, getDocs, addDoc, query, where, setDoc, updateDoc, doc } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import CustomerAutocomplete from '../../components/common/CustomerAutocomplete';
-import ImeiInput from '../../components/ImeiInput';
-import { getLabelNumber } from '../../utils/getLabelNumber';
-import { generateLabelHTML } from '../../utils/printLabel.jsx';
-import PrinterSelector from '../../components/PrinterSelector';
-import { uploadImageToCloudinary } from '../../utils/uploadImage';
+import ImeiInput from '@/shared/components/ImeiInput';
+import { getLabelNumber } from '@/features/labels/data';
+import { generateLabelHTML } from '@/features/labels/printing/printLabel';
+import PrinterSelector from '@/features/labels/printing/PrinterSelector';
+import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
 import { generateSecondHandPurchaseForm } from '../../utils/generateSecondHandPurchaseForm';
 import SignaturePad from '../../components/common/SignaturePad';
-import { imageThumb } from '../../utils/imageUrl';
+import ComboBox from '@/shared/ui/ComboBox';
+import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
+import { readDraft, writeDraft, clearDraft } from '@/shared/lib/formDraft';
+import { imageThumb } from '@/shared/lib/imageUrl';
 import { loadCustomers, rememberCustomer } from '../../utils/customerCache';
-import { recordTacIfNew } from '../../utils/tacLookup';
-import { secondHandLabelData } from '../../utils/labelSync';
+import { recordTacIfNew } from '@/features/labels/tacLookup';
+import { secondHandLabelData } from '@/features/labels/data';
 
 const generateSerialNumber = () => {
   const date = new Date()
@@ -123,13 +126,37 @@ const GRADE_META = {
 };
 
 const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
+  /* One draft per form. Editing an existing device keeps its own, so an
+     interrupted edit cannot leak into a new purchase. */
+  const draftKey = `second-hand:${initialData?.id || 'new'}`;
   const { currentUser } = useAuth();
   const {
     deviceChecklist, complaintTypes, shopDetails, purchaseTerms,
     brands: brandOptions = [], models: modelOptions = {},
-    ramOptions = [], romOptions = []
+    ramOptions = [], romOptions = [], fieldOptions = {}, rememberOptions
   } = useSettings();
   const MODELS = modelOptions;
+
+  /* The grab handle at the top of this sheet announced that it could be pulled
+     down; until now only Cancel actually closed it. */
+  /* Pulling the sheet down might be a slip, so it keeps the draft. The X is a
+     decision, so it throws the draft away - see discardAndClose below. */
+  const { sheetProps, handleProps, scrollRef } = useSheetDismiss({ onDismiss: onCancel });
+
+  const discardAndClose = () => {
+    clearDraft(draftKey);
+    onCancel();
+  };
+
+  const startFresh = () => {
+    clearDraft(draftKey);
+    setRestoredDraft(false);
+    setFormData(buildFreshForm());
+    setSignatureData(initialData?.sellerSignatureUrl || '');
+    setFieldErrors({});
+    setError('');
+    scrollRef.current?.scrollTo({ top: 0 });
+  };
 
   /* A scan-to-create flow (see ScannerPage) may hand us a recognised brand/model
      from the TAC database - only relevant for a brand-new record. The TAC data
@@ -179,14 +206,17 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
     return 'A'
   }
 
-  const [formData, setFormData] = useState(() => {
+  /* The form as it opens, with nothing typed. Named so that "Start empty" can
+     reset to exactly the same thing the form would have shown on a first open,
+     rather than closing and asking the person to come back in. */
+  const buildFreshForm = () => {
     const base = initialData || {};
     const checklist = base.conditionChecklist || {};
     const autoGrade = base.gradeAutoCalculated || 'A';
     const manualOverride = base.gradeManualOverride || false;
     const initialCondition = base.condition || (manualOverride ? base.condition : autoGrade);
 
-    return {
+    const fresh = {
       brand: initialData ? (base.brand || '') : prefillBrand,
       customBrand: initialData ? (base.customBrand || '') : '',
       model: initialData ? (base.model || '') : (prefillModelMatch || prefillData?.model || ''),
@@ -222,7 +252,51 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       sellerIdVerified: base.sellerIdVerified || false,
       agreementAcceptedAt: base.agreementAcceptedAt || ''
     };
+
+    return fresh;
+  };
+
+  /* An untouched form is not empty: it already carries today's date, a status
+     of available and a starting grade. Storing that as a draft meant opening
+     the form, touching nothing, closing it, and being told on the way back in
+     that there was unsaved work to restore. A draft is only a draft once it
+     differs from this. */
+  const [pristine] = useState(() => JSON.stringify(buildFreshForm()));
+
+  const [formData, setFormData] = useState(() => {
+    /* Anything typed before the form was closed wins, except over a device the
+       scanner just handed us - that is a fresh intake, not the old draft. */
+    const draft = prefillData ? null : readDraft(draftKey);
+    const fresh = buildFreshForm();
+    return draft ? { ...fresh, ...draft } : fresh;
   });
+
+  const [restoredDraft, setRestoredDraft] = useState(() => {
+    if (prefillData) return false;
+    const draft = readDraft(draftKey);
+    if (!draft) return false;
+    /* Also covers drafts left behind by the version that stored untouched
+       forms: there is one on disk, but it says nothing the form would not. */
+    return JSON.stringify({ ...buildFreshForm(), ...draft }) !== pristine;
+  });
+
+  /* What the form looked like when it was last written. A draft is only worth
+     keeping while it differs from that: saving changes formData (the uploaded
+     signature comes back into it), which re-runs this effect, and without the
+     comparison the draft would be written straight back after being cleared -
+     so a saved purchase would still greet the next person with "picked up
+     where you left off". */
+  const savedSnapshot = useRef(null);
+
+  /* Keep what has been typed, as it is typed. Declared below formData: the
+     dependency array is read during render, so referencing it any earlier
+     throws before the form can draw. */
+  useEffect(() => {
+    const now = JSON.stringify(formData);
+    if (now === savedSnapshot.current) return;
+    if (now === pristine) { clearDraft(draftKey); return; }
+    writeDraft(draftKey, formData);
+  }, [draftKey, formData, pristine]);
 
   // Signature is held as a data URL until save, then uploaded like any other image
   const [signatureData, setSignatureData] = useState(initialData?.sellerSignatureUrl || '');
@@ -232,21 +306,17 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
   const [error, setError] = useState('');
 
   const [customers, setCustomers] = useState([]);
-  const [showNewCustomer, setShowNewCustomer] = useState(false);
-  const [newCust, setNewCust] = useState({ name: '', phone: '', idType: 'Aadhaar', idNumber: '' });
-  const [savingCustomer, setSavingCustomer] = useState(false);
+  /* No "new customer" mode. Typing a name nobody matches simply means a new
+     seller, created when the purchase is saved - the same rule the brand and
+     model fields follow. */
+  const [sellerIdType, setSellerIdType] = useState(initialData?.sellerIdType || 'Aadhaar');
+  const [sellerIdNumber, setSellerIdNumber] = useState(initialData?.sellerIdNumber || '');
   const [labelAssigned, setLabelAssigned] = useState(false);
   const [assignedLabelNumber, setAssignedLabelNumber] = useState(null);
   const [assigning, setAssigning] = useState(false);
   const [localId, setLocalId] = useState(initialData?.id || null);
   const [saveStatus, setSaveStatus] = useState('idle');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [customModel, setCustomModel] = useState(
-    () => (!initialData && prefillData?.model && !prefillModelMatch) ? prefillData.model : ''
-  );
-  const [isCustomModel, setIsCustomModel] = useState(
-    () => !!(!initialData && prefillData?.model && !prefillModelMatch)
-  );
   const [conditionChecklist, setConditionChecklist] = useState({});
   const [brandInitialized, setBrandInitialized] = useState(false);
   const [showPrinterSelector, setShowPrinterSelector] = useState(false);
@@ -374,6 +444,8 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
   }, []);
 
   const handleCustomerSelect = (c) => {
+    if (c.idType) setSellerIdType(c.idType);
+    if (c.idNumber) setSellerIdNumber(c.idNumber);
     setFormData(prev => ({
       ...prev,
       sellerCustomerId: c.id,
@@ -383,35 +455,43 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
     }));
   };
 
-  const handleSaveNewCustomer = async () => {
-    if (!newCust.name || !newCust.phone) return alert('Name and phone required');
-    setSavingCustomer(true);
+  /**
+   * The seller, as a customer record. Called from the save path: if the name
+   * typed matched nobody, that person is new and is created now. Previously
+   * this only happened if you first noticed the autocomplete had no match and
+   * then went looking for a "New Customer" button - so a seller typed straight
+   * into the field was never recorded as a customer at all.
+   */
+  const ensureSellerCustomer = async () => {
+    if (formData.sellerCustomerId) return formData.sellerCustomerId;
+    const name = (formData.sellerName || '').trim();
+    const phone = (formData.sellerPhone || '').trim();
+    if (!name || !phone) return '';
+
+    const now = new Date().toISOString();
+    const record = {
+      name,
+      phone,
+      idType: sellerIdType,
+      idNumber: sellerIdNumber,
+      // Without these the customer never reaches the other phones, which
+      // pull changes by updatedAt.
+      createdAt: now,
+      updatedAt: now,
+    };
     try {
-      const now = new Date().toISOString();
-      const record = {
-        name: newCust.name,
-        phone: newCust.phone,
-        idType: newCust.idType,
-        idNumber: newCust.idNumber,
-        // Without these the customer never reaches the other phones, which
-        // pull changes by updatedAt.
-        createdAt: now,
-        updatedAt: now
-      };
       const docRef = await addDoc(collection(db, 'customers'), record);
       const c = { id: docRef.id, ...record };
       rememberCustomer(c);
       setCustomers(prev => [...prev, c]);
-      handleCustomerSelect(c);
-      setShowNewCustomer(false);
-      setNewCust({ name: '', phone: '', idType: 'Aadhaar', idNumber: '' });
+      return docRef.id;
     } catch (err) {
-      alert(err.message);
-    } finally {
-      setSavingCustomer(false);
+      /* Recording the seller must never cost the shop the purchase it just
+         took in. The mobile still saves with the name and phone on it. */
+      console.error('Could not save the seller as a customer:', err);
+      return '';
     }
   };
-
 
   const handleUploadPhoto = async (file, fieldName) => {
     if (!file) return;
@@ -483,28 +563,31 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
     return uploadImageToCloudinary(file);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validateAndScroll()) return;
+  /**
+   * Write the purchase, and hand back what was written.
+   * Returns null when validation stopped it or the write failed - in both
+   * cases the reason is already on screen.
+   */
+  const saveMobile = async () => {
+    if (!validateAndScroll()) return null;
     if (!formData.photo1Url) {
       setError("Photo 1 (Front) is required.");
-      return;
+      return null;
     }
     setSaveStatus('saving');
     setError('');
     try {
       const sellerSignatureUrl = await uploadSignature();
+      const sellerCustomerId = await ensureSellerCustomer();
       const purchasePrice = Number(formData.purchasePrice) || 0
       const salePrice = Number(formData.salePrice) || 0
       const totalCost = purchasePrice + (wasRepaired ? repairCost : 0)
       const profit = salePrice - totalCost
-      const finalData = { ...formData, conditionChecklist, wasRepaired, repairItems: wasRepaired ? repairItems : [], repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
-      if (finalData.brand === 'Other') {
-        finalData.brand = finalData.customBrand;
-      }
+      const finalData = { ...formData, conditionChecklist, wasRepaired, repairItems: wasRepaired ? repairItems : [], repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, sellerCustomerId, sellerIdType, sellerIdNumber, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
       delete finalData.customBrand;
 
-      if (!initialData) {
+      // Only on the very first write - a second save is not a new device.
+      if (!initialData && !localId) {
         recordTacIfNew(finalData.imei1, finalData.brand, finalData.model, currentUser?.uid);
       }
 
@@ -513,12 +596,28 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       }
 
       const newId = await onSave(finalData);
+      const settled = { ...formData, sellerSignatureUrl, sellerCustomerId };
+      savedSnapshot.current = JSON.stringify(settled);
+      setFormData(settled);
+      clearDraft(draftKey);
       if (newId) setLocalId(newId);
       setSaveStatus('saved');
+      await rememberOptions({
+        brands: finalData.brand,
+        models: { [finalData.brand]: finalData.model },
+        field_options: { supplier: finalData.supplier },
+      });
+      return { ...finalData, id: newId || localId };
     } catch (err) {
       setError(err.message);
       setSaveStatus('idle');
+      return null;
     }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    await saveMobile();
   };
 
   const handleSaveAndPrint = async () => {
@@ -538,10 +637,8 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       const totalCost = purchasePrice + (wasRepaired ? repairCost : 0)
       const profit = salePrice - totalCost
       const sellerSignatureUrl = await uploadSignature();
-      const finalData = { ...formData, conditionChecklist, serialNumber: finalSerialNumber, wasRepaired, repairItems: wasRepaired ? repairItems : [], repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
-      if (finalData.brand === 'Other') {
-        finalData.brand = finalData.customBrand;
-      }
+      const sellerCustomerId = await ensureSellerCustomer();
+      const finalData = { ...formData, conditionChecklist, serialNumber: finalSerialNumber, wasRepaired, repairItems: wasRepaired ? repairItems : [], repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, sellerCustomerId, sellerIdType, sellerIdNumber, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
       delete finalData.customBrand;
 
       if (!initialData) {
@@ -553,7 +650,16 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       }
 
       const savedDocId = await onSave(finalData);
+      const settled = { ...formData, sellerSignatureUrl, sellerCustomerId };
+      savedSnapshot.current = JSON.stringify(settled);
+      setFormData(settled);
+      clearDraft(draftKey);
       if (savedDocId) setLocalId(savedDocId);
+      await rememberOptions({
+        brands: finalData.brand,
+        models: { [finalData.brand]: finalData.model },
+        field_options: { supplier: finalData.supplier },
+      });
 
       const nextLabel = await getLabelNumber();
       const labelData = {
@@ -619,14 +725,32 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
   };
 
   // Printed at the counter so the seller signs it while handing the device over
-  const handlePrintPurchaseForm = () => {
-    const formDataForPrint = {
-      ...formData,
-      assignedLabelNumber: labelAssigned ? assignedLabelNumber : null,
+  /* Printing saves first. The declaration describes a purchase, so it should
+     never describe one the shop has no record of - and the seller's signature
+     is only a drawing in the browser until a save uploads it. A signature is
+     not required: a declaration printed to be signed on paper is a normal way
+     to work. */
+  const handlePrintPurchaseForm = async () => {
+    const saved = await saveMobile();
+    if (!saved) return;
+
+    const seller = customers.find(c => c.id === saved.sellerCustomerId) || {
+      name: saved.sellerName,
+      phone: saved.sellerPhone,
+      idType: sellerIdType,
+      idNumber: sellerIdNumber,
     };
-    const seller = customers.find(c => c.id === formData.sellerCustomerId) || {};
-    const html = generateSecondHandPurchaseForm(formDataForPrint, shopDetails, seller, currentUser?.displayName || '');
+    const html = generateSecondHandPurchaseForm(
+      { ...saved, assignedLabelNumber: labelAssigned ? assignedLabelNumber : null },
+      shopDetails,
+      seller,
+      currentUser?.displayName || '',
+    );
     const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setError('Your browser blocked the print window. Allow pop-ups for this site and try again.');
+      return;
+    }
     printWindow.document.write(html);
     printWindow.document.close();
     setTimeout(() => printWindow.print(), 500);
@@ -714,10 +838,17 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center animate-fade-in">
-      <div className="bg-[#f1f5f9] w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col h-[94dvh] md:h-auto md:max-h-[90vh] overflow-hidden">
+      <div
+        {...sheetProps}
+        className="bg-[#f1f5f9] w-full md:max-w-2xl md:mx-auto rounded-t-3xl md:rounded-2xl flex flex-col h-[94dvh] md:h-auto md:max-h-[90vh] overflow-hidden"
+      >
 
-        {/* Grab handle */}
-        <div className="md:hidden flex justify-center pt-2.5 pb-1 flex-shrink-0 bg-white">
+        {/* Grab handle - drag it down to close */}
+        <div
+          {...handleProps}
+          className="md:hidden flex justify-center pt-2.5 pb-2 flex-shrink-0 bg-white"
+          aria-label="Drag down to close"
+        >
           <div className="w-10 h-1 bg-gray-300 rounded-full"></div>
         </div>
 
@@ -742,7 +873,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
               )}
               <button
                 type="button"
-                onClick={onCancel}
+                onClick={discardAndClose}
                 className="w-10 h-10 rounded-full flex items-center justify-center text-gray-400 active:bg-gray-100"
                 aria-label="Close"
               >
@@ -753,7 +884,27 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
         </div>
 
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 space-y-3">
+
+          {/* Say so, rather than silently showing someone a form that is not
+              as empty as they expect. */}
+          {restoredDraft && (
+            <div className="bg-[#002395]/5 border border-[#002395]/20 rounded-2xl px-4 py-3 flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-[#0f172a]">Picked up where you left off</p>
+                <p className="text-xs text-[#64748b] mt-0.5 leading-relaxed">
+                  This form still had your unsaved details from last time.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={startFresh}
+                className="text-xs font-bold text-[#002395] shrink-0 py-1"
+              >
+                Start empty
+              </button>
+            </div>
+          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-[#ED2939] px-4 py-3 rounded-2xl text-sm font-medium">
@@ -766,88 +917,63 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
             <div className="space-y-3">
               <div ref={brandRef}>
                 <label className={labelClass}>Brand <span className="text-[#ED2939]">*</span></label>
-                <select required value={formData.brand} onChange={e => {
-                  const selectedBrand = e.target.value
-                  setFormData(prev => ({ ...prev, brand: selectedBrand, model: '' }))
-                  setCustomModel('')
-                  setIsCustomModel(false)
-                  if (fieldErrors.brand) setFieldErrors(prev => ({...prev, brand: ''}))
-                }} className={`${inputClass} ${fieldErrors.brand ? errorInput : ''}`}>
-                  <option value="">Select Brand</option>
-                  {BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
-                </select>
-                {formData.brand === 'Other' && (
-                  <input type="text" placeholder="Enter Custom Brand" required value={formData.customBrand || ''} onChange={e => setFormData({ ...formData, customBrand: e.target.value })} className={`${inputClass} mt-2`} />
-                )}
-                <FieldError message={fieldErrors.brand} />
+                <ComboBox
+                  required
+                  value={formData.brand}
+                  options={BRANDS}
+                  placeholder="Select or type a brand"
+                  error={fieldErrors.brand}
+                  onChange={v => {
+                    setFormData(prev => ({ ...prev, brand: v, model: '' }))
+                    if (fieldErrors.brand) setFieldErrors(prev => ({...prev, brand: ''}))
+                  }}
+                />
               </div>
 
               <div ref={modelRef}>
                 <label className={labelClass}>Model <span className="text-[#ED2939]">*</span></label>
-                <select
+                <ComboBox
                   required
-                  value={isCustomModel ? '__custom__' : formData.model}
-                  onChange={e => {
-                    if (e.target.value === '__custom__') {
-                      setIsCustomModel(true)
-                      setFormData(prev => ({ ...prev, model: '' }))
-                    } else {
-                      setIsCustomModel(false)
-                      setCustomModel('')
-                      setFormData(prev => ({ ...prev, model: e.target.value }))
-                    }
+                  value={formData.model}
+                  options={MODELS[formData.brand] || []}
+                  disabled={!formData.brand}
+                  placeholder={formData.brand ? 'Select or type a model' : 'Select brand first'}
+                  error={fieldErrors.model}
+                  onChange={v => {
+                    setFormData(prev => ({ ...prev, model: v }))
                     if (fieldErrors.model) setFieldErrors(prev => ({...prev, model: ''}))
                   }}
-                  disabled={!formData.brand}
-                  className={`${inputClass} disabled:bg-gray-50 disabled:text-gray-400 ${fieldErrors.model ? errorInput : ''}`}
-                >
-                  <option value="" disabled>{formData.brand ? 'Select model' : 'Select brand first'}</option>
-                  {formData.brand && (MODELS[formData.brand] || []).length === 0 && (
-                    <option value="" disabled>No models available</option>
-                  )}
-                  {(MODELS[formData.brand] || []).map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                  <option value="__custom__">Other (type manually)</option>
-                </select>
-                {isCustomModel && (
-                  <input
-                    type="text"
-                    placeholder="Type model name"
-                    value={customModel}
-                    onChange={e => {
-                      setCustomModel(e.target.value)
-                      setFormData(prev => ({ ...prev, model: e.target.value }))
-                      if (fieldErrors.model) setFieldErrors(prev => ({...prev, model: ''}))
-                    }}
-                    className={`${inputClass} mt-2`}
-                  />
-                )}
-                <FieldError message={fieldErrors.model} />
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div ref={ramRef}>
                   <label className={labelClass}>RAM <span className="text-[#ED2939]">*</span></label>
-                  <select required value={formData.ram} onChange={e => {
-                    setFormData({ ...formData, ram: e.target.value })
-                    if (fieldErrors.ram) setFieldErrors(prev => ({...prev, ram: ''}))
-                  }} className={`${inputClass} ${fieldErrors.ram ? errorInput : ''}`}>
-                    <option value="">Select</option>
-                    {ramOptions.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                  <FieldError message={fieldErrors.ram} />
+                  <ComboBox
+                    required
+                    value={formData.ram}
+                    options={ramOptions}
+                    placeholder="Select or type"
+                    error={fieldErrors.ram}
+                    onChange={v => {
+                      setFormData(prev => ({ ...prev, ram: v }))
+                      if (fieldErrors.ram) setFieldErrors(prev => ({...prev, ram: ''}))
+                    }}
+                  />
                 </div>
                 <div ref={romRef}>
                   <label className={labelClass}>ROM <span className="text-[#ED2939]">*</span></label>
-                  <select required value={formData.rom} onChange={e => {
-                    setFormData({ ...formData, rom: e.target.value })
-                    if (fieldErrors.rom) setFieldErrors(prev => ({...prev, rom: ''}))
-                  }} className={`${inputClass} ${fieldErrors.rom ? errorInput : ''}`}>
-                    <option value="">Select</option>
-                    {romOptions.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                  <FieldError message={fieldErrors.rom} />
+                  <ComboBox
+                    required
+                    value={formData.rom}
+                    options={romOptions}
+                    placeholder="Select or type"
+                    error={fieldErrors.rom}
+                    onChange={v => {
+                      setFormData(prev => ({ ...prev, rom: v }))
+                      if (fieldErrors.rom) setFieldErrors(prev => ({...prev, rom: ''}))
+                    }}
+                  />
                 </div>
               </div>
             </div>
@@ -949,7 +1075,12 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
                 </div>
                 <div>
                   <label className={labelClass}>Supplier</label>
-                  <input type="text" value={formData.supplier} onChange={e => setFormData({ ...formData, supplier: e.target.value })} placeholder="Shop or person" className={inputClass} />
+                  <ComboBox
+                    value={formData.supplier}
+                    options={fieldOptions.supplier || []}
+                    placeholder="Shop or person"
+                    onChange={v => setFormData(prev => ({ ...prev, supplier: v }))}
+                  />
                 </div>
               </div>
             </div>
@@ -1196,56 +1327,56 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
           </Section>
 
           {/* ── SELLER ── */}
-          <Section icon="fa-user" title="Seller" hint="Who you bought the phone from">
+          <Section
+            icon="fa-user"
+            title="Seller"
+            hint="Search by name or number. Someone new? Just type them in - they are added when you save."
+          >
             <CustomerAutocomplete
               customers={customers}
               nameValue={formData.sellerName}
               phoneValue={formData.sellerPhone}
               alternatePhoneValue={formData.sellerAlternatePhone}
-              onNameChange={val => setFormData({ ...formData, sellerName: val })}
-              onPhoneChange={val => setFormData({ ...formData, sellerPhone: val })}
+              onNameChange={val => setFormData({ ...formData, sellerName: val, sellerCustomerId: '' })}
+              onPhoneChange={val => setFormData({ ...formData, sellerPhone: val, sellerCustomerId: '' })}
               onAlternatePhoneChange={val => setFormData({ ...formData, sellerAlternatePhone: val })}
               onSelectCustomer={handleCustomerSelect}
             />
-            <button
-              type="button"
-              onClick={() => setShowNewCustomer(!showNewCustomer)}
-              className="w-full mt-3 border-2 border-dashed border-[#002395]/30 text-[#002395] rounded-xl py-2.5 text-sm font-bold"
-            >
-              {showNewCustomer ? 'Cancel adding new' : <><i className="fas fa-user-plus mr-2"></i>New Customer</>}
-            </button>
 
-            {showNewCustomer && (
-              <div className="mt-3 p-3 bg-[#f8fafc] border border-[#e2e8f0] rounded-xl space-y-3">
-                <div>
-                  <label className={labelClass}>Name <span className="text-[#ED2939]">*</span></label>
-                  <input type="text" value={newCust.name} onChange={e => setNewCust({ ...newCust, name: e.target.value })} className={inputClass} />
-                </div>
-                <div>
-                  <label className={labelClass}>Phone <span className="text-[#ED2939]">*</span></label>
-                  <input type="tel" inputMode="tel" pattern="[0-9]*" value={newCust.phone} onChange={e => setNewCust({ ...newCust, phone: e.target.value })} className={inputClass} />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelClass}>ID Type</label>
-                    <select value={newCust.idType} onChange={e => setNewCust({ ...newCust, idType: e.target.value })} className={inputClass}>
-                      <option>Aadhaar</option>
-                      <option>PAN</option>
-                      <option>Driving License</option>
-                      <option>Voter ID</option>
-                      <option>Other</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>ID Number</label>
-                    <input type="text" inputMode="numeric" pattern="[0-9]*" value={newCust.idNumber} onChange={e => setNewCust({ ...newCust, idNumber: e.target.value })} className={inputClass} />
-                  </div>
-                </div>
-                <button type="button" onClick={handleSaveNewCustomer} disabled={savingCustomer} className="w-full bg-[#002395] text-white px-5 py-3 rounded-xl font-bold text-sm disabled:opacity-50">
-                  {savingCustomer ? 'Saving...' : 'Save & Select Customer'}
-                </button>
+            {/* Needed on the purchase declaration the seller signs. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div>
+                <label className={labelClass}>ID type</label>
+                <select
+                  value={sellerIdType}
+                  onChange={e => setSellerIdType(e.target.value)}
+                  className={inputClass}
+                >
+                  <option>Aadhaar</option>
+                  <option>PAN</option>
+                  <option>Driving License</option>
+                  <option>Voter ID</option>
+                  <option>Other</option>
+                </select>
               </div>
-            )}
+              <div>
+                <label className={labelClass}>ID number</label>
+                <input
+                  type="text"
+                  value={sellerIdNumber}
+                  onChange={e => setSellerIdNumber(e.target.value)}
+                  placeholder="As on the document"
+                  className={inputClass}
+                />
+              </div>
+            </div>
+
+            <p className="text-xs text-[#64748b] mt-3 leading-relaxed">
+              {formData.sellerCustomerId
+                ? 'This seller is already in your customer list.'
+                : 'This seller will be added to your customer list when you save.'}
+            </p>
+
           </Section>
 
           {/* ── SELLER AGREEMENT ── */}
@@ -1298,6 +1429,28 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
                 />
               </div>
 
+              {/* The declaration belongs here, under the signature it carries,
+                  and only once the purchase is saved. A signature is a drawing
+                  in the browser until it is saved - printed any earlier the
+                  declaration comes out with an empty signature box, and
+                  describes a purchase with no record behind it. */}
+              <div className="mt-4 pt-3 border-t border-[#e2e8f0]">
+                <button
+                  type="button"
+                  onClick={handlePrintPurchaseForm}
+                  disabled={saveStatus === 'saving'}
+                  className="w-full border border-[#e2e8f0] text-[#002395] rounded-xl py-2.5 text-sm font-semibold disabled:text-[#94a3b8] disabled:bg-[#f8fafc]"
+                >
+                  <i className="fas fa-file-signature mr-2"></i>
+                  {saveStatus === 'saving' ? 'Saving...' : 'Save and print declaration'}
+                </button>
+                <p className="text-[12px] text-[#64748b] mt-2 leading-relaxed">
+                  Saves the purchase, then prints the declaration with the shop's
+                  terms and whatever signature has been captured - sign it on
+                  paper if the seller has not signed here.
+                </p>
+              </div>
+
               <FieldError message={fieldErrors.agreement} />
 
               {formData.agreementAcceptedAt && (
@@ -1312,7 +1465,10 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
         </div>
 
         {/* Footer */}
-        <div className="flex-shrink-0 px-4 py-3 border-t border-gray-100 bg-white pb-safe space-y-2">
+        {/* One way to save, and one variant of it. The declaration moved to the
+            Seller section it belongs to, and Cancel is gone: the X in the header
+            closes this, and so does pulling the sheet down. */}
+        <div className="flex-shrink-0 px-4 py-3 border-t border-gray-100 bg-white pb-safe">
           {saveStatus === 'saved' ? (
             <button type="button" disabled className="w-full bg-green-600 text-white rounded-xl py-3.5 text-sm font-bold opacity-60">
               Saved <i className="fas fa-check ml-1"></i>
@@ -1322,43 +1478,26 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
               type="button"
               onClick={handleSubmit}
               disabled={saveStatus === 'saving' || Object.values(uploadingPhotos).some(v => v)}
-              className="w-full bg-[#002395] text-white rounded-xl py-3.5 text-sm font-bold disabled:opacity-50"
+              className="w-full bg-[#002395] text-white rounded-xl py-3.5 text-[15px] font-bold disabled:opacity-50"
             >
-              {saveStatus === 'saving' ? 'Saving...' : initialData ? 'Save Changes' : 'Add Mobile'}
+              {saveStatus === 'saving'
+                ? 'Saving...'
+                : initialData ? 'Save changes' : 'Save this mobile'}
             </button>
           )}
 
           <button
             type="button"
-            onClick={handlePrintPurchaseForm}
-            className="w-full bg-amber-50 text-amber-700 rounded-xl py-3 text-sm font-bold"
+            onClick={handleSaveAndPrint}
+            disabled={isProcessing || saveStatus.includes('Assigned \u2713')}
+            className="w-full mt-2 text-[13px] font-semibold text-[#002395] py-2 disabled:opacity-40"
           >
-            <i className="fas fa-file-signature mr-2"></i>Print Purchase Declaration
+            {isProcessing
+              ? 'Processing...'
+              : saveStatus.includes('Assigned \u2713')
+                ? 'Label printed'
+                : 'Save and print the price label'}
           </button>
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-3 text-sm font-bold"
-            >
-              {saveStatus === 'saved' || labelAssigned ? 'Done' : 'Cancel'}
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveAndPrint}
-              disabled={isProcessing || saveStatus.includes('Assigned ✓')}
-              className="flex-[2] bg-green-600 text-white rounded-xl py-3 text-sm font-bold disabled:opacity-50"
-            >
-              {isProcessing ? (
-                <span><i className="fas fa-spinner fa-spin mr-2"></i>Processing...</span>
-              ) : saveStatus.includes('Assigned ✓') ? (
-                <span>Done ✓</span>
-              ) : (
-                <span><i className="fas fa-print mr-2"></i>Save &amp; Print</span>
-              )}
-            </button>
-          </div>
         </div>
 
         <PrinterSelector

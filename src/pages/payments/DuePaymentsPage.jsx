@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
-import { db } from '../../firebase/firebase';
+import { db } from '@/shared/firebase/firebase';
 import { useNavigate } from 'react-router-dom';
-import Layout from '../../components/common/Layout';
-import { openWhatsApp } from '../../utils/phone';
+import Layout from '@/shared/ui/Layout';
+import { openWhatsApp } from '@/shared/lib/phone';
+import { describeFirebaseError } from '@/shared/firebase/firebaseError';
 
 const DuePaymentsPage = () => {
   const navigate = useNavigate();
@@ -12,10 +13,12 @@ const DuePaymentsPage = () => {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('All');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const fetchDuePayments = async () => {
     try {
       setLoading(true);
+      setLoadError('');
 
       // Fetch sales with balance due
       const salesSnap = await getDocs(
@@ -30,12 +33,16 @@ const DuePaymentsPage = () => {
       });
       setDueSales(salesList);
 
-      // Fetch completed service orders without bill
+      /* Completed orders with no bill raised yet.
+         Deliberately no orderBy: combining it with the status filter needs a
+         composite index that does not exist, and without one Firestore rejects
+         the whole query - which silently emptied this half of the page, hiding
+         every unbilled completed order. The query has no limit, so it returns
+         them all either way and sorting here costs nothing. */
       const serviceSnap = await getDocs(
         query(
           collection(db, 'service_orders'),
-          where('status', '==', 'Completed'),
-          orderBy('createdAt', 'desc')
+          where('status', '==', 'Completed')
         )
       );
       const serviceList = [];
@@ -45,10 +52,12 @@ const DuePaymentsPage = () => {
           serviceList.push({ id: doc.id, ...data });
         }
       });
+      serviceList.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setDueServices(serviceList);
 
     } catch (error) {
       console.error('Error fetching due payments:', error);
+      setLoadError(describeFirebaseError(error));
     } finally {
       setLoading(false);
     }
@@ -70,7 +79,16 @@ const DuePaymentsPage = () => {
     o.orderNumber?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const totalDueAmount = dueSales.reduce((sum, s) => sum + (Number(s.balanceDue) || 0), 0);
+  /* Both halves of the page count towards the headline. They did not before:
+     the summary only ever added up the sales, which was invisible while the
+     service query was failing and returning nothing. */
+  const salesDueAmount = dueSales.reduce((sum, s) => sum + (Number(s.balanceDue) || 0), 0);
+  const servicesDueAmount = dueServices.reduce(
+    (sum, o) => sum + Math.max(0, (Number(o.estimatedPrice) || 0) - (Number(o.advancePaid) || 0)),
+    0,
+  );
+  const totalDueAmount = salesDueAmount + servicesDueAmount;
+  const pendingBillCount = dueSales.length + dueServices.length;
 
   if (loading) {
     return (
@@ -110,9 +128,20 @@ const DuePaymentsPage = () => {
           </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-center">
             <p className="text-xs text-gray-400 mb-1">Pending Bills</p>
-            <p className="text-xl font-bold text-[#002395]">{dueSales.length}</p>
+            <p className="text-xl font-bold text-[#002395]">{pendingBillCount}</p>
           </div>
         </div>
+
+        {loadError && (
+          <div className="px-4 pb-2">
+            <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
+              <p className="text-sm font-bold text-[#ED2939]">
+                <i className="fas fa-exclamation-circle mr-2"></i>Could not load due payments
+              </p>
+              <p className="text-xs text-[#7a1520] mt-1 leading-relaxed">{loadError}</p>
+            </div>
+          </div>
+        )}
 
         {/* SEARCH */}
         <div className="px-4 pb-3">
