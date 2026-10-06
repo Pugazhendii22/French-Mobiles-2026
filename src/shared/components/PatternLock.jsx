@@ -117,8 +117,9 @@ const PatternLock = ({ value = [], onChange, readOnly = false }) => {
   const onPointerCancel = () => { stroke.current = null; };
 
   /* Keeps the stroke off the sheet underneath, which would otherwise read a
-     downward line as a pull-to-dismiss. */
-  const contain = (e) => e.stopPropagation();
+     downward line as a pull-to-dismiss. Nothing to contain when the pattern is
+     only being shown: a page displaying one still has to scroll. */
+  const contain = readOnly ? undefined : (e) => e.stopPropagation();
 
   const positionOf = (id) => pattern.indexOf(id);
   const points = pattern.map(id => DOT_GEOMETRY[id - 1]).filter(Boolean);
@@ -194,13 +195,15 @@ const PatternLock = ({ value = [], onChange, readOnly = false }) => {
 
                        touchAction none on the dot and not on the pad: a stroke
                        that starts on a dot must not also scroll, while a thumb
-                       landing in the gap must. */
+                       landing in the gap must. Only while there is a stroke to
+                       protect - on a page that just shows the pattern, holding
+                       the scroll over nine dots would be nine dead spots. */
                     style={{
                       width: 64, height: 64, borderRadius: '50%',
                       backgroundColor: on ? colour : '#ffffff',
                       border: `2px solid ${on ? colour : '#D1D5DB'}`,
                       color: on ? '#ffffff' : '#94a3b8',
-                      touchAction: 'none',
+                      touchAction: readOnly ? undefined : 'none',
                     }}
                     className="relative flex items-center justify-center text-[17px] font-bold shadow-sm transition-colors disabled:cursor-default"
                     aria-pressed={on}

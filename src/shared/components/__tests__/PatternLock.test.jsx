@@ -182,3 +182,39 @@ describe('living inside a bottom sheet', () => {
     }
   })
 })
+
+/* readOnly is used on the scan page, which is an ordinary scrolling page rather
+   than a sheet. There is no stroke to protect there, so nothing may be held. */
+describe('read-only does not interfere with the page it sits on', () => {
+  it('leaves the scroll alone on every dot', () => {
+    render(<PatternLock value={[1, 2, 3]} readOnly />)
+    for (const dot of screen.getAllByLabelText(/^Dot /)) {
+      expect(dot.style.touchAction).toBe('')
+    }
+  })
+
+  it('lets a touch through to whatever is underneath', () => {
+    const onPageTouch = vi.fn()
+    render(
+      <div onTouchStart={onPageTouch} onTouchMove={onPageTouch}>
+        <PatternLock value={[1, 2, 3]} readOnly />
+      </div>
+    )
+    const dot = screen.getByLabelText(/^Dot 1/)
+    fireEvent.touchStart(dot, { touches: [{ clientY: 10 }] })
+    fireEvent.touchMove(dot, { touches: [{ clientY: 300 }] })
+    expect(onPageTouch).toHaveBeenCalled()
+  })
+
+  it('still shows the sequence it was given', () => {
+    render(<PatternLock value={[4, 5, 6]} readOnly />)
+    expect(screen.getByText('4 → 5 → 6')).toBeTruthy()
+  })
+
+  it('offers no way to change it', () => {
+    render(<PatternLock value={[1, 2]} readOnly />)
+    expect(screen.queryByText('Undo last dot')).toBeNull()
+    expect(screen.queryByText('Clear')).toBeNull()
+    for (const dot of screen.getAllByLabelText(/^Dot /)) expect(dot.disabled).toBe(true)
+  })
+})

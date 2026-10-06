@@ -8,26 +8,6 @@ import { useAuth } from '../../context/AuthContext';
 import { imageThumb } from '@/shared/lib/imageUrl';
 import { secondHandLabelData } from '@/features/labels/data';
 
-const Badge = ({ children, color }) => (
-  <span className={`rounded-full px-3 py-1 text-xs font-bold ${color}`}>
-    {children}
-  </span>
-);
-
-const Row = ({ label, value, isBold = true }) => (
-  <div className="flex justify-between items-start py-1">
-    <span className="text-gray-500 text-sm">{label}</span>
-    <span className={`text-sm ${isBold ? 'font-medium' : ''} text-right`}>{value}</span>
-  </div>
-);
-
-const Section = ({ title, children }) => (
-  <div className="bg-white rounded-xl p-4 mb-3 shadow-sm break-words">
-    {title && <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">{title}</h3>}
-    {children}
-  </div>
-);
-
 const ScanResult = () => {
   const { labelNumber } = useParams();
   const navigate = useNavigate();
@@ -89,17 +69,6 @@ const ScanResult = () => {
   );
 
   const { labelType, data: d, assignedAt } = data;
-  const hasPatternLock = d?.lockType === 'Pattern' || (Array.isArray(d?.lockPattern) && d.lockPattern.length > 0);
-
-  const typeColor = {
-    second_hand: 'bg-purple-100 text-purple-800',
-    service_order: 'bg-blue-100 text-blue-800',
-    product: 'bg-teal-100 text-teal-800',
-    sale: 'bg-green-100 text-green-800'
-  }[labelType] || 'bg-gray-100 text-gray-800';
-
-  const typeName = labelType.replace('_', ' ').toUpperCase();
-
   const receivedAtVal = serviceOrder?.receivedAt || d?.receivedAt || d?.createdAt;
   const expectedCompletionAtVal = serviceOrder?.expectedCompletionAt || d?.expectedCompletionAt;
   const orderStatus = serviceOrder?.status || d?.status;
@@ -412,134 +381,15 @@ const ScanResult = () => {
                   </div>
                 )}
               </div>
-               {/* This page is public - the label is stuck to the device, so anyone
-                   who scans it would otherwise be handed the unlock pattern.
-                   Only show it to signed-in staff. */}
-               {currentUser && ((serviceOrder?.lockPattern || d?.lockPattern || []).filter(Boolean).length > 0) && (() => {
-                const pattern = (serviceOrder?.lockPattern || d?.lockPattern || []).filter(Boolean);
-                const points = pattern.map(id => {
-                  const idx = id - 1;
-                  return {
-                    id,
-                    cx: 25 + (idx % 3) * 75,
-                    cy: 25 + Math.floor(idx / 3) * 75
-                  };
-                });
-                return (
-                  <div className="mt-3 flex flex-col items-center">
-                    <p className="text-xs text-gray-400 mb-2 self-start">Pattern</p>
-                    <div className="relative" style={{ width: '160px', height: '160px' }}>
-                      <svg viewBox="0 0 200 200" className="w-40 h-40 bg-[#f0f4ff] rounded-2xl mx-auto" preserveAspectRatio="xMidYMid meet">
-                        <defs>
-                          <marker
-                            id="arrow"
-                            viewBox="0 0 10 10"
-                            refX="18"
-                            refY="5"
-                            markerWidth="6"
-                            markerHeight="6"
-                            orient="auto-start-reverse"
-                          >
-                            <path d="M 0 1.5 L 7 5 L 0 8.5 z" fill="#002395" />
-                          </marker>
-                        </defs>
-                        
-                        {points.slice(0, -1).map((p, i) => {
-                          const next = points[i + 1];
-                          return (
-                            <line
-                              key={i}
-                              x1={p.cx}
-                              y1={p.cy}
-                              x2={next.cx}
-                              y2={next.cy}
-                              stroke="#002395"
-                              strokeWidth="3"
-                              opacity="0.8"
-                              markerEnd="url(#arrow)"
-                            />
-                          );
-                        })}
-
-                        {Array.from({ length: 9 }).map((_, index) => {
-                          const id = index + 1;
-                          const cx = 25 + (index % 3) * 75;
-                          const cy = 25 + Math.floor(index / 3) * 75;
-                          const isSelected = pattern.includes(id);
-                          const isFirst = pattern[0] === id;
-                          const isLast = pattern.length > 1 && pattern[pattern.length - 1] === id;
-                          
-                          let fill = 'white';
-                          let stroke = '#D1D5DB';
-                          let textColor = '#6B7280';
-                          
-                          if (isSelected) {
-                            if (isFirst) {
-                              fill = '#22C55E';
-                              stroke = '#22C55E';
-                            } else if (isLast) {
-                              fill = '#ED2939';
-                              stroke = '#ED2939';
-                            } else {
-                              fill = '#002395';
-                              stroke = '#002395';
-                            }
-                            textColor = 'white';
-                          }
-                          
-                          return (
-                            <g key={id}>
-                              <circle cx={cx} cy={cy} r="16" fill={fill} stroke={stroke} strokeWidth="2" />
-                              <text
-                                x={cx}
-                                y={cy}
-                                textAnchor="middle"
-                                dominantBaseline="central"
-                                fill={textColor}
-                                fontSize="12"
-                                fontWeight="bold"
-                              >
-                                {id}
-                              </text>
-                            </g>
-                          );
-                        })}
-                      </svg>
-                    </div>
-                    
-                    <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',justifyContent:'center',gap:'4px',marginTop:'8px'}}>
-                      {pattern.map((dot, index) => {
-                        const isFirst = index === 0;
-                        const isLast = pattern.length > 1 && index === pattern.length - 1;
-                        const dotBg = isFirst ? '#22C55E' : isLast ? '#ED2939' : '#002395';
-                        
-                        return (
-                          <span key={dot} style={{display:'inline-flex',alignItems:'center',gap:'4px'}}>
-                            <span style={{
-                              width: '24px', height: '24px',
-                              borderRadius: '50%',
-                              background: dotBg,
-                              color: 'white',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: '12px',
-                              fontWeight: 'bold'
-                            }}>{dot}</span>
-                            {index < pattern.length - 1 && (
-                              <span style={{color:'#002395',fontWeight:'bold'}}>→</span>
-                            )}
-                          </span>
-                        );
-                      })}
-                    </div>
-
-                    <p style={{fontSize:'10px',color:'#666',textAlign:'center',marginTop:'4px'}}>
-                      Start: {pattern[0]} → End: {pattern[pattern.length-1]} ({pattern.length} points)
-                    </p>
-                  </div>
-                );
-              })()}
+              {/* This page is public - the label is stuck to the device, so anyone
+                  who scans it would otherwise be handed the unlock pattern.
+                  Only show it to signed-in staff. */}
+              {currentUser && (serviceOrder?.lockPattern || d?.lockPattern || []).filter(Boolean).length > 0 && (
+                <div className="mt-3">
+                  <p className="text-xs text-gray-400 mb-2">Pattern</p>
+                  <PatternLock value={serviceOrder?.lockPattern || d?.lockPattern || []} readOnly />
+                </div>
+              )}
               {(serviceOrder?.rawMaterialCost || d?.rawMaterialCost) > 0 && (
                 <div className="mt-2">
                   <p className="text-xs text-gray-400">Raw Material Cost</p>
