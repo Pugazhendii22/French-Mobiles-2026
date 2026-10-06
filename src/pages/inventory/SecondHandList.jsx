@@ -13,6 +13,8 @@ import { openWhatsApp as openWhatsAppChat, isWhatsAppReady } from '@/shared/lib/
 import { secondHandLabelData, syncLabelSnapshot } from '@/features/labels/data';
 import { gradeOf } from '@/shared/ui/uiTokens';
 import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
+import { matchesQuery } from '@/shared/lib/searchMatch';
+import NewSaleModal from '@/components/sales/NewSaleModal';
 
 /* ─────────────────────────────────────────────
    SECOND-HAND STOCK
@@ -21,10 +23,16 @@ import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
    finding one, so a row is kept to the height of its photo and the list reads
    as a single column of prices you can compare down the page.
 
-   Two things carry meaning without being read:
-     - the spine down the left of each row is the condition grade;
+   Two things carry meaning without being read, and both answer the same
+   question - can I sell this:
+     - the spine down the left of each row is green while the device is in
+       stock and grey once it is sold;
      - a sold device recedes - its photo greys out and its price is struck -
        so what is still on the shelf is what stands out.
+
+   The spine used to carry the condition grade, in four colours. Four colours
+   with no key beside them read as decoration, and the grade is already spelled
+   out in words under the model, where it can be understood.
 
    Red is used for exactly one thing here: deleting. It is not a decoration,
    a border, or a label for "sold".
@@ -58,6 +66,8 @@ const SecondHandList = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [whatsAppDialog, setWhatsAppDialog] = useState({ open: false });
   const [loadError, setLoadError] = useState('');
+  /* The device being sold, prefilled for the sale sheet. Null when closed. */
+  const [sellTarget, setSellTarget] = useState(null);
 
   /* The WhatsApp confirmation is a sheet too - pull it down to skip sending. */
   const {
@@ -133,20 +143,23 @@ const SecondHandList = () => {
     finally { setDeleting(false); }
   };
 
+  /* Opening the sale here rather than navigating to /sales. The Sell button
+     sits inside a row, a thumb's width from the row itself, so it gets pressed
+     by accident - and losing the whole list to another page over a mis-tap is a
+     bad trade. A sheet over the list is dismissed by pulling it down, and the
+     list is still underneath where it was left. */
   const sellMobile = (m) => {
-    navigate('/sales', {
-      state: {
-        items: [{
-          type: 'Second-hand',
-          itemId: m.id,
-          name: `${m.brand} ${m.model}`,
-          quantity: 1,
-          unitPrice: Number(m.salePrice || 0),
-          purchaseCost: Number(m.purchasePrice || 0),
-          repairCost: Number(m.repairCost || 0),
-          imei: m.imei1 || '',
-        }],
-      },
+    setSellTarget({
+      items: [{
+        type: 'Second-hand',
+        itemId: m.id,
+        name: `${m.brand} ${m.model}`,
+        quantity: 1,
+        unitPrice: Number(m.salePrice || 0),
+        purchaseCost: Number(m.purchasePrice || 0),
+        repairCost: Number(m.repairCost || 0),
+        imei: m.imei1 || '',
+      }],
     });
   };
 
@@ -154,11 +167,13 @@ const SecondHandList = () => {
     return mobiles.filter(m => {
       if (filterStatus !== 'all' && (m.status || 'available') !== filterStatus) return false;
 
-      const q = searchQuery.replace(/\s+/g, '').toLowerCase();
-      const matchesSearch = !searchQuery ||
-        [m.brand, m.model, m.imei1, m.imei2, m.serialNumber].some(v =>
-          v?.replace(/\s+/g, '').toLowerCase().includes(q)
-        );
+      /* The person is as good a handle on a device as the device itself:
+         staff remember who they bought a phone from long before they remember
+         which model it was. */
+      const matchesSearch = matchesQuery(searchQuery, [
+        m.brand, m.model, m.imei1, m.imei2, m.serialNumber,
+        m.sellerName, m.sellerPhone, m.sellerAlternatePhone, m.supplier,
+      ]);
 
       // Date filtering
       const mobileDate = m.createdAt ? new Date(m.createdAt) : null;
@@ -201,6 +216,8 @@ const SecondHandList = () => {
     document.body.style.overflow = (showModal || deleteTarget) ? 'hidden' : 'unset';
     return () => { document.body.style.overflow = 'unset'; };
   }, [showModal, deleteTarget]);
+  /* The sale sheet locks scrolling itself, so it is deliberately not listed
+     above - both effects writing the same style fought each other on close. */
 
   const dateFilterActive = Boolean(fromDate || toDate);
   const TABS = [
@@ -226,7 +243,7 @@ const SecondHandList = () => {
           <input
             id="secondhand-search"
             type="text"
-            placeholder="Search by brand, model or IMEI"
+            placeholder="Search by brand, model, IMEI, name or number"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="w-full pl-11 pr-10 py-3 bg-white border border-[#E6EAF0] focus:border-[#002395] rounded-xl focus:outline-none text-[15px] text-[#0F172A] placeholder:text-[#94a3b8]"
@@ -363,11 +380,12 @@ const SecondHandList = () => {
                   onKeyDown={e => { if (e.key === 'Enter') navigate(`/inventory/second-hand/${m.id}`); }}
                   className="relative flex items-center gap-3 pl-4 pr-3 py-2.5 border-b border-[#F1F4F9] last:border-0 cursor-pointer active:bg-[#F8FAFC] focus:outline-none focus:bg-[#F1F4F9]"
                 >
-                  {/* The grade, as a spine. Greyed out once the device is gone. */}
+                  {/* Green down the left means it is still on the shelf, grey
+                      means it is gone. Two colours, one question. */}
                   <span
                     aria-hidden="true"
                     className="absolute left-0 top-0 bottom-0 w-[3px]"
-                    style={{ background: sold ? '#E2E8F0' : grade.spine }}
+                    style={{ background: sold ? '#CBD5E1' : '#16a34a' }}
                   />
 
                   <div className={`w-11 h-11 rounded-lg bg-[#F8FAFC] border border-[#F1F4F9] shrink-0 overflow-hidden flex items-center justify-center ${sold ? 'grayscale opacity-50' : ''}`}>
@@ -421,6 +439,15 @@ const SecondHandList = () => {
             prefillData={prefillData}
             onSave={handleSaveMobile}
             onCancel={() => { setShowModal(false); setPrefillData(null); }}
+          />
+        )}
+
+        {/* Selling happens over the list, not on another page. */}
+        {sellTarget && (
+          <NewSaleModal
+            prefillData={sellTarget}
+            onClose={() => setSellTarget(null)}
+            onSuccess={() => { invalidateCollection('second_hand_mobiles'); fetchMobiles(); }}
           />
         )}
         <ConfirmDeleteModal
