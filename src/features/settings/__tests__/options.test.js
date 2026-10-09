@@ -234,3 +234,48 @@ describe('a failed write', () => {
     expect(fsMocks.setDoc).toHaveBeenCalledTimes(2)
   })
 })
+
+/* A repair description typed on the second-hand form. It joins the same list the
+   service form offers as complaint types, because the shop names the work once. */
+describe('remembering a repair description', () => {
+  it('plans a write for one that is new', () => {
+    expect(planOptionWrites({ complaint_types: 'Back glass replacement' }, known)).toEqual([
+      { docKey: 'complaint_types', field: 'items', value: 'Back glass replacement' },
+    ])
+  })
+
+  it('plans nothing for one the shop already lists', () => {
+    expect(planOptionWrites({ complaint_types: 'Display replacement' },
+      { ...known, complaint_types: ['Display replacement'] })).toEqual([])
+  })
+
+  it('matches an existing one ignoring case and spacing', () => {
+    expect(planOptionWrites({ complaint_types: '  display   REPLACEMENT ' },
+      { ...known, complaint_types: ['Display replacement'] })).toEqual([])
+  })
+
+  it('takes several repairs off one purchase', () => {
+    expect(planOptionWrites(
+      { complaint_types: ['Back glass replacement', 'Camera lens'] },
+      { ...known, complaint_types: [] },
+    )).toEqual([
+      { docKey: 'complaint_types', field: 'items', value: 'Back glass replacement' },
+      { docKey: 'complaint_types', field: 'items', value: 'Camera lens' },
+    ])
+  })
+
+  it('sends one write when two repair lines say the same thing', () => {
+    expect(planOptionWrites(
+      { complaint_types: ['Camera lens', 'camera  lens', 'Camera Lens'] },
+      { ...known, complaint_types: [] },
+    )).toEqual([
+      { docKey: 'complaint_types', field: 'items', value: 'Camera lens' },
+    ])
+  })
+
+  it('ignores blank and missing lines', () => {
+    expect(planOptionWrites({ complaint_types: ['', '   ', undefined, null] },
+      { ...known, complaint_types: [] })).toEqual([])
+    expect(planOptionWrites({ complaint_types: undefined }, known)).toEqual([])
+  })
+})

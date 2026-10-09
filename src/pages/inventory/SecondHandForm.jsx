@@ -618,6 +618,9 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
         brands: finalData.brand,
         models: { [finalData.brand]: finalData.model },
         field_options: { supplier: finalData.supplier },
+        /* Every repair described on this purchase that the shop does not already
+           list. The same list the service form offers as complaint types. */
+        complaint_types: (finalData.repairItems || []).map(r => r.description),
       });
       return { ...finalData, id: newId || localId };
     } catch (err) {
@@ -671,6 +674,9 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
         brands: finalData.brand,
         models: { [finalData.brand]: finalData.model },
         field_options: { supplier: finalData.supplier },
+        /* Every repair described on this purchase that the shop does not already
+           list. The same list the service form offers as complaint types. */
+        complaint_types: (finalData.repairItems || []).map(r => r.description),
       });
 
       const nextLabel = await getLabelNumber();
