@@ -536,12 +536,24 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
   const addRepairItem = () => {
     setRepairItems(prev => [...prev, {
       description: '',
-      isCustom: false,
       cost: '',
       technician: '',
       date: new Date().toISOString().split('T')[0]
     }])
   }
+
+  /* The repairs as they should be stored. isCustom was never anything but UI
+     state for the old "Other" box, and a record should not carry a field nothing
+     reads - the same reason customBrand is deleted on the way out below. Records
+     saved before this keep theirs until they are next saved. */
+  const repairItemsToSave = () => {
+    if (!wasRepaired) return [];
+    return repairItems.map(item => {
+      const stored = { ...item };
+      delete stored.isCustom;
+      return stored;
+    });
+  };
 
   const removeRepairItem = (index) => {
     setRepairItems(prev => prev.filter((_, i) => i !== index))
@@ -583,7 +595,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       const salePrice = Number(formData.salePrice) || 0
       const totalCost = purchasePrice + (wasRepaired ? repairCost : 0)
       const profit = salePrice - totalCost
-      const finalData = { ...formData, conditionChecklist, wasRepaired, repairItems: wasRepaired ? repairItems : [], repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, sellerCustomerId, sellerIdType, sellerIdNumber, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
+      const finalData = { ...formData, conditionChecklist, wasRepaired, repairItems: repairItemsToSave(), repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, sellerCustomerId, sellerIdType, sellerIdNumber, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
       delete finalData.customBrand;
 
       // Only on the very first write - a second save is not a new device.
@@ -638,7 +650,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       const profit = salePrice - totalCost
       const sellerSignatureUrl = await uploadSignature();
       const sellerCustomerId = await ensureSellerCustomer();
-      const finalData = { ...formData, conditionChecklist, serialNumber: finalSerialNumber, wasRepaired, repairItems: wasRepaired ? repairItems : [], repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, sellerCustomerId, sellerIdType, sellerIdNumber, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
+      const finalData = { ...formData, conditionChecklist, serialNumber: finalSerialNumber, wasRepaired, repairItems: repairItemsToSave(), repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, sellerCustomerId, sellerIdType, sellerIdNumber, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
       delete finalData.customBrand;
 
       if (!initialData) {
@@ -1130,34 +1142,19 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
                     <div className="space-y-2">
                       <div>
                         <label className={labelClass}>Description <span className="text-[#ED2939]">*</span></label>
-                        <select
-                          value={item.isCustom ? '__custom__' : item.description}
-                          onChange={e => {
-                            if (e.target.value === '__custom__') {
-                              updateRepairItem(index, 'description', '')
-                              updateRepairItem(index, 'isCustom', true)
-                            } else {
-                              updateRepairItem(index, 'description', e.target.value)
-                              updateRepairItem(index, 'isCustom', false)
-                            }
-                          }}
-                          className={inputClass}
-                        >
-                          <option value="">Select repair type</option>
-                          {complaintTypes.map((type, i) => (
-                            <option key={i} value={type}>{type}</option>
-                          ))}
-                          <option value="__custom__">Other (type manually)</option>
-                        </select>
-                        {item.isCustom && (
-                          <input
-                            type="text"
-                            value={item.description}
-                            onChange={e => updateRepairItem(index, 'description', e.target.value)}
-                            placeholder="Describe the repair"
-                            className={`${inputClass} mt-2`}
-                          />
-                        )}
+                        {/* Type or pick, like every other option field on this
+                            form. It was the one left behind: a closed list with
+                            an "Other (type manually)" row that revealed a second
+                            box underneath, so describing a repair nobody had
+                            listed took three taps and left two inputs on screen
+                            for one answer. Typing is the escape hatch now. */}
+                        <ComboBox
+                          required
+                          value={item.description}
+                          options={complaintTypes}
+                          placeholder="Select or type the repair"
+                          onChange={v => updateRepairItem(index, 'description', v)}
+                        />
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
