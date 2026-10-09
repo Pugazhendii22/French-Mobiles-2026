@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   staffNameOf, matchStaffByName, technicianOptions, technicianFor, technicianToRemember,
+  defaultTechnicianName,
 } from '@/features/service/technician'
 
 const STAFF = [
@@ -154,5 +155,37 @@ describe('what gets remembered after a save', () => {
     expect(technicianToRemember('', STAFF)).toBeNull()
     expect(technicianToRemember('   ', STAFF)).toBeNull()
     expect(technicianToRemember(undefined, STAFF)).toBeNull()
+  })
+})
+
+/* The shop's own admin account is named "French Mobiles" in the users
+   collection, and that name was being pre-filled as the technician on every new
+   order - then printed on the job card. */
+describe('who the box starts on', () => {
+  it('starts an admin on nobody, rather than on the account name', () => {
+    expect(defaultTechnicianName({ isAdmin: true, ownName: 'French Mobiles' })).toBe('')
+  })
+
+  it('starts a member of staff on themselves', () => {
+    expect(defaultTechnicianName({ isAdmin: false, ownName: 'Ravi Kumar' })).toBe('Ravi Kumar')
+  })
+
+  it('keeps whoever an existing order already names', () => {
+    expect(defaultTechnicianName({
+      isAdmin: true, ownName: 'French Mobiles', existing: 'Kumar Mobile Service',
+    })).toBe('Kumar Mobile Service')
+    expect(defaultTechnicianName({
+      isAdmin: false, ownName: 'Ravi Kumar', existing: 'Anand',
+    })).toBe('Anand')
+  })
+
+  it('does not treat a blank stored name as a name worth keeping', () => {
+    expect(defaultTechnicianName({ isAdmin: true, ownName: 'French Mobiles', existing: '   ' })).toBe('')
+    expect(defaultTechnicianName({ isAdmin: false, ownName: 'Ravi Kumar', existing: '' })).toBe('Ravi Kumar')
+  })
+
+  it('copes with nothing at all', () => {
+    expect(defaultTechnicianName()).toBe('')
+    expect(defaultTechnicianName({ isAdmin: false })).toBe('')
   })
 })

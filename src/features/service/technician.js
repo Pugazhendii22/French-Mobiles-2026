@@ -88,3 +88,22 @@ export const technicianFor = ({ typed, staffOptions = [], previousUid = '', fall
     isOutside: Boolean(name.trim()),
   };
 };
+
+/**
+ * Who the technician box starts on, before anyone chooses.
+ *
+ * An admin starts on nobody. It used to start on the signed-in account's name,
+ * which for a shop signed in as itself is the shop's own name - so every order
+ * went in reading "French Mobiles" as the technician, and the job card printed
+ * it. Blank asks the question instead of answering it wrongly.
+ *
+ * A member of staff is the technician: they took the device in, the order is
+ * theirs, and they cannot assign it to anybody else.
+ *
+ * An order that already names someone keeps them, whoever is opening it.
+ */
+export const defaultTechnicianName = ({ isAdmin = false, ownName = '', existing = '' } = {}) => {
+  const already = String(existing ?? '').trim();
+  if (already) return String(existing);
+  return isAdmin ? '' : String(ownName ?? '');
+};

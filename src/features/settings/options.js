@@ -32,8 +32,16 @@ const plan = (writes, docKey, field, value, existing) => {
   const clean = normalizeOption(value)
   if (!clean || !field) return
   if (findExisting(existing, clean)) return
+  /* Already queued by this same save - two repair lines describing the same work,
+     say. arrayUnion would collapse them server side, but there is no reason to
+     send the write twice. */
+  if (writes.some(w => w.docKey === docKey && w.field === field && squash(w.value) === squash(clean))) return
   writes.push({ docKey, field, value: clean })
 }
+
+/* A field may be given one value or several - a purchase can list several
+   repairs, where a brand is only ever one. */
+const asList = (value) => (Array.isArray(value) ? value : [value])
 
 /**
  * The writes needed so every requested value is on its list.
@@ -44,6 +52,13 @@ export const planOptionWrites = (requested = {}, known = {}) => {
   const req = requested || {}
 
   plan(writes, 'brands', 'items', req.brands, known.brands || [])
+
+  /* The shop's repair vocabulary, shared with the service form's complaint list -
+     the same document, because a thing that gets repaired and a thing a customer
+     complains about are the same thing named twice. */
+  asList(req.complaint_types).forEach(value =>
+    plan(writes, 'complaint_types', 'items', value, known.complaint_types || [])
+  )
 
   Object.entries(req.models || {}).forEach(([brand, model]) => {
     const brandKey = normalizeOption(brand)

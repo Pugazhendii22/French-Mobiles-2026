@@ -313,6 +313,7 @@ export const SettingsProvider = ({ children }) => {
       brands: settings.brands?.items || [],
       models: settings.models || {},
       field_options: settings.field_options || {},
+      complaint_types: settings.complaint_types?.items || [],
     }
     const writes = planOptionWrites(requested, known)
     if (!writes.length) return
@@ -322,12 +323,8 @@ export const SettingsProvider = ({ children }) => {
 
     const next = { ...settings }
     writes.forEach(({ docKey, field, value }) => {
-      if (docKey === 'brands') {
-        next.brands = { items: [...(next.brands?.items || []), value] }
-      } else {
-        next[docKey] = { ...(next[docKey] || {}) }
-        next[docKey][field] = [...(next[docKey][field] || []), value]
-      }
+      next[docKey] = { ...(next[docKey] || {}) }
+      next[docKey][field] = [...(next[docKey][field] || []), value]
     })
     setSettings(next)
     localStorage.setItem(CACHE_KEY, JSON.stringify({ data: next, timestamp: Date.now() }))

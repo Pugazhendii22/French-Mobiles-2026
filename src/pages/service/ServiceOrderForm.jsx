@@ -12,7 +12,9 @@ import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 import { readDraft, writeDraft, clearDraft } from '@/shared/lib/formDraft';
 import { toDateTimeLocal, nowDateTimeLocal } from '@/shared/lib/datetime';
 import { requireOrderDates } from '@/features/service/orderState';
-import { technicianFor, technicianOptions, technicianToRemember } from '@/features/service/technician';
+import {
+  technicianFor, technicianOptions, technicianToRemember, defaultTechnicianName,
+} from '@/features/service/technician';
 import { getLabelNumber } from '@/features/labels/data';
 import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
 import { generateLabelHTML } from '@/features/labels/printing/printLabel';
@@ -76,12 +78,26 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
     : null;
 
 
+  /* Who the technician box starts on.
+
+     An admin starts on nobody. It used to start on the signed-in account's name,
+     which for a shop signed in as itself is the shop's own name - so every order
+     went in reading "French Mobiles" as the technician, and the job card printed
+     it. Blank, with the box's own placeholder, asks the question instead.
+
+     A member of staff is the technician: they took the device in, the order is
+     theirs, and they cannot assign it to anyone else. */
+  const isAdminUser = userRole?.toLowerCase() === 'admin';
+  const ownTechnicianName = userName || currentUser?.displayName || currentUser?.email || '';
+
   const buildFreshForm = () => {
     const nowLocal = nowDateTimeLocal();
     const base = initialData ? {
       ...initialData,
       alternatePhone: initialData.alternatePhone || '',
-      technicianName: initialData.technicianName || userName || currentUser?.displayName || currentUser?.email || '',
+      technicianName: defaultTechnicianName({
+        isAdmin: isAdminUser, ownName: ownTechnicianName, existing: initialData.technicianName,
+      }),
       technicianUid: initialData.technicianUid || currentUser?.uid || '',
       receivedAt: toDateTimeLocal(initialData.receivedAt) || nowLocal,
       expectedCompletionAt: toDateTimeLocal(initialData.expectedCompletionAt) || ''
@@ -109,7 +125,7 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
       outsideLabourCost: '',
       suggestions: '',
       imageUrl: '',
-      technicianName: userName || currentUser?.displayName || currentUser?.email || '',
+      technicianName: defaultTechnicianName({ isAdmin: isAdminUser, ownName: ownTechnicianName }),
       technicianUid: currentUser?.uid || '',
       receivedAt: nowLocal,
       expectedCompletionAt: ''
@@ -400,13 +416,14 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
          technicianUid pointed at, which would have thrown away a typed name the
          moment it was saved - and the uid now holds the shop's owner for the
          order rather than always the person doing the work. */
-      finalData.technicianName = finalData.technicianName
-        || staffOptions.find(u => u.uid === finalData.technicianUid)?.name
-        || currentUser?.displayName || currentUser?.email || '';
+      /* Whatever the box says, including nothing. Falling back to the account's
+         name here would put "French Mobiles" back on an order an admin had
+         deliberately left unassigned. */
+      finalData.technicianName = finalData.technicianName || '';
       finalData.technicianUid = finalData.technicianUid || currentUser?.uid || '';
     } else {
       // Staff, and anyone whose role has not loaded, own the orders they take in.
-      finalData.technicianName = userName || currentUser?.displayName || currentUser?.email || '';
+      finalData.technicianName = ownTechnicianName;
       finalData.technicianUid = currentUser?.uid || '';
     }
 
@@ -1073,7 +1090,7 @@ const ServiceOrderForm = ({ initialData, prefillData, onSave, onCancel }) => {
                     </>
                   ) : (
                     <div className={`${inputClass} bg-gray-50 font-medium text-[#64748b]`}>
-                      {formData.technicianName || userName || currentUser?.displayName || currentUser?.email || 'Current User'}
+                      {formData.technicianName || ownTechnicianName || 'Current User'}
                     </div>
                   )}
                 </div>

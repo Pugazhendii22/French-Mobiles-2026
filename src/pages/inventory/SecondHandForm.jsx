@@ -12,6 +12,7 @@ import { uploadImageToCloudinary } from '@/shared/lib/uploadImage';
 import { generateSecondHandPurchaseForm } from '../../utils/generateSecondHandPurchaseForm';
 import SignaturePad from '../../components/common/SignaturePad';
 import ComboBox from '@/shared/ui/ComboBox';
+import { statusForSave, REPAIRING } from '@/features/inventory/stockState';
 import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 import { readDraft, writeDraft, clearDraft } from '@/shared/lib/formDraft';
 import { imageThumb } from '@/shared/lib/imageUrl';
@@ -325,6 +326,10 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
   const [wasRepaired, setWasRepaired] = useState(initialData?.wasRepaired || false);
   const [repairItems, setRepairItems] = useState(initialData?.repairItems || []);
   const [repairCost, setRepairCost] = useState(initialData?.repairCost || 0);
+  /* Whether the shop still has work to do on it. Separate from wasRepaired,
+     which is about cost: a device can have been repaired and be ready, or have
+     repairs listed and still be in pieces. This is what keeps it off a bill. */
+  const [stillBeingRepaired, setStillBeingRepaired] = useState(initialData?.status === REPAIRING);
 
   const brandRef = useRef(null)
   const modelRef = useRef(null)
@@ -595,7 +600,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       const salePrice = Number(formData.salePrice) || 0
       const totalCost = purchasePrice + (wasRepaired ? repairCost : 0)
       const profit = salePrice - totalCost
-      const finalData = { ...formData, conditionChecklist, wasRepaired, repairItems: repairItemsToSave(), repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, sellerCustomerId, sellerIdType, sellerIdNumber, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
+      const finalData = { ...formData, status: statusForSave({ current: formData.status, stillBeingRepaired }), conditionChecklist, wasRepaired, repairItems: repairItemsToSave(), repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, sellerCustomerId, sellerIdType, sellerIdNumber, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
       delete finalData.customBrand;
 
       // Only on the very first write - a second save is not a new device.
@@ -618,6 +623,9 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
         brands: finalData.brand,
         models: { [finalData.brand]: finalData.model },
         field_options: { supplier: finalData.supplier },
+        /* Every repair described on this purchase that the shop does not already
+           list. The same list the service form offers as complaint types. */
+        complaint_types: (finalData.repairItems || []).map(r => r.description),
       });
       return { ...finalData, id: newId || localId };
     } catch (err) {
@@ -650,7 +658,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
       const profit = salePrice - totalCost
       const sellerSignatureUrl = await uploadSignature();
       const sellerCustomerId = await ensureSellerCustomer();
-      const finalData = { ...formData, conditionChecklist, serialNumber: finalSerialNumber, wasRepaired, repairItems: repairItemsToSave(), repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, sellerCustomerId, sellerIdType, sellerIdNumber, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
+      const finalData = { ...formData, status: statusForSave({ current: formData.status, stillBeingRepaired }), conditionChecklist, serialNumber: finalSerialNumber, wasRepaired, repairItems: repairItemsToSave(), repairCost: wasRepaired ? repairCost : 0, totalCost, profit, createdBy: currentUser.uid, sellerSignatureUrl, sellerCustomerId, sellerIdType, sellerIdNumber, agreementAcceptedAt: formData.agreementAcceptedAt || new Date().toISOString() };
       delete finalData.customBrand;
 
       if (!initialData) {
@@ -671,6 +679,9 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
         brands: finalData.brand,
         models: { [finalData.brand]: finalData.model },
         field_options: { supplier: finalData.supplier },
+        /* Every repair described on this purchase that the shop does not already
+           list. The same list the service form offers as complaint types. */
+        complaint_types: (finalData.repairItems || []).map(r => r.description),
       });
 
       const nextLabel = await getLabelNumber();
@@ -1109,6 +1120,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
                   if (wasRepaired) {
                     setRepairItems([])
                     setRepairCost(0)
+                    setStillBeingRepaired(false)
                   }
                 }}
                 className={`relative inline-flex items-center flex-shrink-0 w-12 h-7 rounded-full transition-colors duration-200 focus:outline-none ${
@@ -1123,6 +1135,33 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
                 />
               </button>
             </div>
+
+            {wasRepaired && (
+              <div className="flex items-center justify-between gap-3 bg-amber-50 rounded-xl p-3 border border-amber-200 mt-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[#0f172a]">Still being repaired</p>
+                  <p className="text-[12px] text-[#64748b] leading-snug mt-0.5">
+                    Keeps it off the stock list as sellable and out of the new-sale picker until
+                    the work is done. Turn it off when the phone is back together.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStillBeingRepaired(v => !v)}
+                  className={`relative inline-flex items-center flex-shrink-0 w-12 h-7 rounded-full transition-colors duration-200 focus:outline-none ${
+                    stillBeingRepaired ? 'bg-[#f59e0b]' : 'bg-gray-300'
+                  }`}
+                  aria-pressed={stillBeingRepaired}
+                  aria-label="Still being repaired"
+                >
+                  <span
+                    className={`inline-block w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200 ${
+                      stillBeingRepaired ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            )}
 
             {wasRepaired && (
               <div className="space-y-3 mt-3">

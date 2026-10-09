@@ -5,6 +5,7 @@ import { db, auth } from '@/shared/firebase/firebase';
 import { useSettings } from '../../context/SettingsContext';
 import SecondHandForm from './SecondHandForm';
 import { getLabelNumber } from '@/features/labels/data';
+import { stockMetaOf, stockStateOf, AVAILABLE, REPAIRING } from '@/features/inventory/stockState';
 import { generateLabelHTML } from '@/features/labels/printing/printLabel';
 import PrinterSelector from '@/features/labels/printing/PrinterSelector';
 import Layout from '@/shared/ui/Layout';
@@ -39,6 +40,7 @@ const SecondHandView = () => {
   const [labelEntry, setLabelEntry] = useState(null);
   const [showLabelDialog, setShowLabelDialog] = useState(false);
   const [labelInput, setLabelInput] = useState('');
+  const [markingReady, setMarkingReady] = useState(false);
   const [assigningLabel, setAssigningLabel] = useState(false);
   const [showPrinter, setShowPrinter] = useState(false);
   const [labelHTML, setLabelHTML] = useState('');
@@ -134,7 +136,11 @@ const SecondHandView = () => {
     </Layout>
   );
 
-  const isAvailable = mobile?.status === 'available' || !mobile?.status;
+  const state = stockMetaOf(mobile);
+  /* Sellable, which is narrower than "not sold": a phone still on the bench is
+     neither. */
+  const isAvailable = state.key === AVAILABLE;
+  const beingRepaired = state.key === REPAIRING;
   const canEdit = userRole?.toLowerCase() === 'admin' || isAvailable;
   const heroPhoto = mobile?.photo1Url || mobile?.frontImageUrl;
   /* Both print routes (browser HTML and print-to-shop-PC) must read the mobile
@@ -181,9 +187,9 @@ const SecondHandView = () => {
 
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <span className={`text-[12px] font-bold px-2.5 py-1 rounded-lg ${
-                  isAvailable ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
+                  state.chip
                 }`}>
-                  {isAvailable ? 'In stock' : 'Sold'}
+                  {state.label}
                 </span>
                 {labelEntry && (
                   <span className="text-[12px] font-semibold text-[#64748b]">
@@ -220,6 +226,29 @@ const SecondHandView = () => {
 
           {/* One thing to do here, and quieter ways to do the rest. */}
           <div className="px-4 py-3 border-t border-[#f1f4f9]">
+            {beingRepaired && canEdit && (
+              <button
+                type="button"
+                disabled={markingReady}
+                onClick={async () => {
+                  setMarkingReady(true);
+                  try {
+                    await updateDoc(doc(db, 'second_hand_mobiles', id), { status: AVAILABLE });
+                    invalidateCollection('second_hand_mobiles');
+                    setMobile(prev => ({ ...prev, status: AVAILABLE }));
+                  } catch (err) {
+                    console.error('Could not mark the repair finished:', err);
+                    alert('Could not mark it ready. Please try again.');
+                  } finally {
+                    setMarkingReady(false);
+                  }
+                }}
+                className="w-full bg-[#f59e0b] text-white py-3 rounded-xl text-[15px] font-bold disabled:opacity-50"
+              >
+                {markingReady ? 'Saving...' : 'Repairs done - ready to sell'}
+              </button>
+            )}
+
             {isAvailable && (
               <button
                 onClick={() => {
@@ -271,7 +300,14 @@ const SecondHandView = () => {
               ) : null}
             </div>
 
-            {!isAvailable && userRole?.toLowerCase() !== 'admin' && (
+            {beingRepaired && (
+              <p className="text-center text-[12px] text-[#64748b] mt-2">
+                It stays off the stock list as sellable, and out of the new-sale picker,
+                until the repairs are marked done.
+              </p>
+            )}
+
+            {stockStateOf(mobile) !== AVAILABLE && !beingRepaired && userRole?.toLowerCase() !== 'admin' && (
               <p className="text-center text-[12px] text-[#64748b] mt-2">
                 This one is sold, so only an admin can change it now.
               </p>

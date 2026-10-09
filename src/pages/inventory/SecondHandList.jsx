@@ -12,6 +12,7 @@ import { describeFirebaseError } from '@/shared/firebase/firebaseError';
 import { openWhatsApp as openWhatsAppChat, isWhatsAppReady } from '@/shared/lib/phone';
 import { secondHandLabelData, syncLabelSnapshot } from '@/features/labels/data';
 import { gradeOf, money } from '@/shared/ui/uiTokens';
+import { stockStateOf, stockMetaOf, AVAILABLE, REPAIRING, SOLD } from '@/features/inventory/stockState';
 import { useSheetDismiss } from '@/shared/ui/useSheetDismiss';
 import { matchesQuery } from '@/shared/lib/searchMatch';
 import NewSaleModal from '@/components/sales/NewSaleModal';
@@ -164,7 +165,7 @@ const SecondHandList = () => {
 
   const filteredMobiles = useMemo(() => {
     return mobiles.filter(m => {
-      if (filterStatus !== 'all' && (m.status || 'available') !== filterStatus) return false;
+      if (filterStatus !== 'all' && stockStateOf(m) !== filterStatus) return false;
 
       /* The person is as good a handle on a device as the device itself:
          staff remember who they bought a phone from long before they remember
@@ -184,9 +185,9 @@ const SecondHandList = () => {
   }, [mobiles, filterStatus, searchQuery, fromDate, toDate]);
 
   const counts = useMemo(() => {
-    let available = 0;
-    mobiles.forEach(m => { if ((m.status || 'available') === 'available') available += 1; });
-    return { available, sold: mobiles.length - available };
+    const tally = { [AVAILABLE]: 0, [REPAIRING]: 0, [SOLD]: 0 };
+    mobiles.forEach(m => { tally[stockStateOf(m)] += 1; });
+    return tally;
   }, [mobiles]);
 
   /* Money still standing on the shelf. Only unsold devices count: adding up
@@ -194,7 +195,9 @@ const SecondHandList = () => {
      by every phone the shop has already turned over. */
   const stockValue = useMemo(
     () => filteredMobiles.reduce(
-      (sum, m) => (m.status || 'available') === 'available' ? sum + (Number(m.salePrice) || 0) : sum,
+      /* A phone still on the bench is money the shop has spent, not money on the
+         shelf, so it is left out alongside the sold ones. */
+      (sum, m) => stockStateOf(m) === AVAILABLE ? sum + (Number(m.salePrice) || 0) : sum,
       0,
     ),
     [filteredMobiles],
@@ -221,8 +224,12 @@ const SecondHandList = () => {
   const dateFilterActive = Boolean(fromDate || toDate);
   const TABS = [
     { key: 'all', label: 'All', count: mobiles.length },
-    { key: 'available', label: 'In stock', count: counts.available },
-    { key: 'sold', label: 'Sold', count: counts.sold },
+    { key: AVAILABLE, label: 'In stock', count: counts[AVAILABLE] },
+    /* Only worth a tab while there is something on the bench. */
+    ...(counts[REPAIRING] > 0
+      ? [{ key: REPAIRING, label: 'Being repaired', count: counts[REPAIRING] }]
+      : []),
+    { key: SOLD, label: 'Sold', count: counts[SOLD] },
   ];
 
   return (
@@ -368,7 +375,9 @@ const SecondHandList = () => {
         ) : (
           <div className="bg-white border border-[#E6EAF0] rounded-xl overflow-hidden">
             {filteredMobiles.map(m => {
-              const sold = (m.status || 'available') === 'sold';
+              const state = stockMetaOf(m);
+              const sold = state.key === SOLD;
+              const repairing = state.key === REPAIRING;
               const grade = gradeOf(m.condition);
               return (
                 <div
@@ -379,12 +388,12 @@ const SecondHandList = () => {
                   onKeyDown={e => { if (e.key === 'Enter') navigate(`/inventory/second-hand/${m.id}`); }}
                   className="relative flex items-center gap-3 pl-4 pr-3 py-2.5 border-b border-[#F1F4F9] last:border-0 cursor-pointer active:bg-[#F8FAFC] focus:outline-none focus:bg-[#F1F4F9]"
                 >
-                  {/* Green down the left means it is still on the shelf, grey
-                      means it is gone. Two colours, one question. */}
+                  {/* One question down the left: can I sell this. Green go,
+                      amber still on the bench, grey gone. */}
                   <span
                     aria-hidden="true"
                     className="absolute left-0 top-0 bottom-0 w-[3px]"
-                    style={{ background: sold ? '#CBD5E1' : '#16a34a' }}
+                    style={{ background: state.spine }}
                   />
 
                   <div className={`w-11 h-11 rounded-lg bg-[#F8FAFC] border border-[#F1F4F9] shrink-0 overflow-hidden flex items-center justify-center ${sold ? 'grayscale opacity-50' : ''}`}>
@@ -397,8 +406,13 @@ const SecondHandList = () => {
                     <p className={`text-[15px] font-semibold leading-tight truncate ${sold ? 'text-[#94a3b8]' : 'text-[#0F172A]'}`}>
                       {m.brand} {m.model}
                     </p>
-                    <p className="text-[12px] text-[#64748B] leading-tight mt-0.5 truncate">
-                      {[memoryOf(m), grade.label].filter(Boolean).join(' · ')}
+                    <p className="text-[12px] leading-tight mt-0.5 truncate">
+                      {repairing && (
+                        <span className="font-semibold text-amber-600">Being repaired · </span>
+                      )}
+                      <span className="text-[#64748B]">
+                        {[memoryOf(m), grade.label].filter(Boolean).join(' · ')}
+                      </span>
                     </p>
                   </div>
 
