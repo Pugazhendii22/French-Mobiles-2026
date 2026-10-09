@@ -5,6 +5,7 @@ import CustomerAutocomplete from '../../components/common/CustomerAutocomplete';
 import SecondHandMobileSelector from '../../components/sales/SecondHandMobileSelector';
 import BarcodeScannerModal from '@/shared/components/BarcodeScannerModal';
 import { lookupLabel } from '@/features/labels/data';
+import { isSellable, isBeingRepaired } from '@/features/inventory/stockState';
 import { describeFirebaseError } from '@/shared/firebase/firebaseError';
 import { Section, FieldError } from '@/shared/ui/ui';
 import { inputClass, labelClass, errorInput, money } from '@/shared/ui/uiTokens';
@@ -102,6 +103,8 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [scannerOpen, setScannerOpen] = useState(false);
+  /* Every second-hand device, sellable or not, so a scan can explain itself. */
+  const allSecondHand = useRef([]);
   const [scanNotice, setScanNotice] = useState('');
   const [dataLoaded, setDataLoaded] = useState(false);
 
@@ -156,7 +159,11 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
           loadCollection('second_hand_mobiles'),
           loadCollection('products'),
         ]);
-        setSecondHandMobiles(shList.filter(m => m.status === 'available'));
+        /* Only sellable stock reaches the picker. The rest is kept so a scan can
+           say why a device is not on it - "already sold" reads as a mistake when
+           the phone is actually still on the bench. */
+        allSecondHand.current = shList;
+        setSecondHandMobiles(shList.filter(isSellable));
         setProducts(pList);
       } catch (err) {
         console.error("Error fetching data:", err);
@@ -317,7 +324,13 @@ const SalesForm = ({ onSave, onCancel, prefillData }) => {
         record = secondHandMobiles.find(m => m.id === label.referenceId);
         if (!record) {
           const name = [label.data?.brand, label.data?.model].filter(Boolean).join(' ') || `Label #${num}`;
-          return { ok: false, message: `${name} is not available for sale (already sold or removed).` };
+          const held = allSecondHand.current.find(m => m.id === label.referenceId);
+          return {
+            ok: false,
+            message: isBeingRepaired(held)
+              ? `${name} is still being repaired, so it cannot go on a bill yet.`
+              : `${name} is not available for sale (already sold or removed).`,
+          };
         }
         kind = 'second_hand';
       } else if (label.labelType === 'product') {
