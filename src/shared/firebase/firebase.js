@@ -6,6 +6,7 @@ import {
     persistentMultipleTabManager,
 } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -76,3 +77,9 @@ try {
 export const db = firestore;
 export const auth = getAuth(app);
 export const secondaryAuth = getAuth(secondaryApp);
+
+/* Callable functions live in asia-south1 (close to the shop, and where the
+   IMEI verification functions were deployed). Without the region argument the
+   SDK calls us-central1 and every invocation fails with a bare "internal"
+   before it ever reaches a function. */
+export const functions = getFunctions(app, 'asia-south1');

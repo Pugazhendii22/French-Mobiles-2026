@@ -19,6 +19,7 @@ import { imageThumb } from '@/shared/lib/imageUrl';
 import { loadCustomers, rememberCustomer } from '../../utils/customerCache';
 import { recordTacIfNew } from '@/features/labels/tacLookup';
 import { secondHandLabelData } from '@/features/labels/data';
+import ImeiVerifyBadge from '@/features/imeiVerification/ImeiVerifyBadge';
 
 const generateSerialNumber = () => {
   const date = new Date()
@@ -1019,6 +1020,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
                   scannerId="scanner-secondhand-imei1"
                 />
                 <FieldError message={fieldErrors.imei1} />
+                <ImeiVerifyBadge imei={formData.imei1} />
               </div>
               <div>
                 <ImeiInput
@@ -1032,6 +1034,7 @@ const SecondHandForm = ({ initialData, prefillData, onSave, onCancel }) => {
                   secondaryLabel="IMEI 1"
                   scannerId="scanner-secondhand-imei2"
                 />
+                <ImeiVerifyBadge imei={formData.imei2} />
               </div>
               <div>
                 <label className={labelClass}>
