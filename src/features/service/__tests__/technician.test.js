@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   staffNameOf, matchStaffByName, technicianOptions, technicianFor, technicianToRemember,
-  defaultTechnicianName,
+  defaultTechnicianName, technicianNamesIn, matchesTechnician,
 } from '@/features/service/technician'
 
 const STAFF = [
@@ -187,5 +187,28 @@ describe('who the box starts on', () => {
   it('copes with nothing at all', () => {
     expect(defaultTechnicianName()).toBe('')
     expect(defaultTechnicianName({ isAdmin: false })).toBe('')
+  })
+})
+
+describe('filtering the list by technician', () => {
+  const ORDERS = [
+    { technicianName: 'PS Kumaran' },
+    { technicianName: 'p.s. kumaran ' },
+    { technicianName: 'Anand' },
+    { technicianName: '' },
+    {},
+  ];
+
+  it('lists each technician once, ignoring case, spaces and full stops', () => {
+    expect(technicianNamesIn(ORDERS)).toEqual(['Anand', 'PS Kumaran'])
+  })
+
+  it('finds every spelling of the same name', () => {
+    expect(ORDERS.filter(o => matchesTechnician(o, 'PS Kumaran'))).toHaveLength(2)
+    expect(ORDERS.filter(o => matchesTechnician(o, 'Anand'))).toHaveLength(1)
+  })
+
+  it('matches everything when no technician is chosen', () => {
+    expect(ORDERS.filter(o => matchesTechnician(o, ''))).toHaveLength(ORDERS.length)
   })
 })

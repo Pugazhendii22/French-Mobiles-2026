@@ -20,6 +20,7 @@ import { checklistEntries, blankChecklist, carryOver, allChecked } from '@/featu
 import {
   STATUSES, isOverdue, isDueToday, isClosed, stateMetaOf, matchesTab, TABS, normalizeDate,
 } from '@/features/service/orderState';
+import { technicianNamesIn, matchesTechnician } from '@/features/service/technician';
 
 const ServiceOrderList = () => {
   const { currentUser, userName, userRole } = useAuth();
@@ -51,6 +52,7 @@ const ServiceOrderList = () => {
   const [tab, setTab] = useState('Open');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [technicianFilter, setTechnicianFilter] = useState('');
   const [showModal, setShowModal] = useState(() => !!location.state);
 
   const { preDeliveryChecklist = [] } = useSettings();
@@ -431,7 +433,8 @@ const ServiceOrderList = () => {
     const matchesFrom = !fromDate || (orderDate && orderDate >= new Date(fromDate + 'T00:00:00'));
     const matchesTo = !toDate || (orderDate && orderDate <= new Date(toDate + 'T23:59:59'));
 
-    return matchesSearch && matchesTab(o, tab, now) && matchesFrom && matchesTo;
+    return matchesSearch && matchesTab(o, tab, now) && matchesFrom && matchesTo
+      && matchesTechnician(o, technicianFilter);
   });
 
   const fab = (
@@ -455,6 +458,10 @@ const ServiceOrderList = () => {
   }, [showModal, completeModalOpen, billModalOpen, deleteTarget]);
 
   const dateFilterActive = Boolean(fromDate || toDate);
+  const filterActive = dateFilterActive || Boolean(technicianFilter);
+  /* Staff only ever load their own orders, so the choice is only worth offering
+     when there is more than one name on the list. */
+  const technicianNames = technicianNamesIn(orders);
 
   /* Only the tabs that answer "how much is waiting on me" carry a count. A
      number beside every status would be eight numbers to read past. */
@@ -513,8 +520,25 @@ const ServiceOrderList = () => {
         <CollapsibleFilter
           open={showFilters}
           onToggle={() => setShowFilters(prev => !prev)}
-          active={dateFilterActive}
+          active={filterActive}
+          label="Filter by date or technician"
         >
+          {technicianNames.length > 1 && (
+            <div>
+              <label htmlFor="technician-filter" className="block text-xs text-gray-500 mb-1">Technician</label>
+              <select
+                id="technician-filter"
+                value={technicianFilter}
+                onChange={e => setTechnicianFilter(e.target.value)}
+                className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#002395]"
+              >
+                <option value="">All technicians</option>
+                {technicianNames.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="flex gap-2">
             <div className="flex-1">
               <label className="block text-xs text-gray-500 mb-1">From</label>
@@ -537,10 +561,10 @@ const ServiceOrderList = () => {
           </div>
           <button
             type="button"
-            onClick={() => { setFromDate(''); setToDate(''); }}
+            onClick={() => { setFromDate(''); setToDate(''); setTechnicianFilter(''); }}
             className="w-full text-sm font-semibold text-[#ED2939] bg-[#ED2939]/10 py-2.5 rounded-xl"
           >
-            Clear dates
+            Clear filters
           </button>
         </CollapsibleFilter>
 
@@ -567,7 +591,7 @@ const ServiceOrderList = () => {
             title={tab === 'Open' ? 'Nothing in the shop' : 'No orders here'}
             hint={tab === 'Open'
               ? 'Everything has been handed back. Tap All to look one up.'
-              : 'Try a different tab, a shorter search, or a wider date range.'}
+              : 'Try a different tab, a shorter search, a wider date range or another technician.'}
           />
         ) : (
           <div className="bg-white border border-[#E6EAF0] rounded-xl overflow-hidden">
