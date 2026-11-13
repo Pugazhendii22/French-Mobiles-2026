@@ -107,3 +107,38 @@ export const defaultTechnicianName = ({ isAdmin = false, ownName = '', existing 
   if (already) return String(existing);
   return isAdmin ? '' : String(ownName ?? '');
 };
+
+/* ─────────────────────────────────────────────
+   WHO DID THE WORK - looking it up afterwards
+
+   The service list can be narrowed to one technician, for questions like "what
+   has PS Kumaran finished this month". The name is matched on the name typed on
+   the order, not the uid, because an outside technician has no uid of their own.
+
+   Names are typed by hand, so "PS Kumaran", "P.S. Kumaran" and "ps kumaran "
+   are all one person here: case, spaces and full stops are ignored.
+────────────────────────────────────────────── */
+
+/** The key two spellings of the same name share. */
+export const technicianKey = (name) =>
+  String(name ?? '').toLowerCase().replace(/[\s.]+/g, '');
+
+/**
+ * Every technician named on these orders, once each, in alphabetical order.
+ * The first spelling met is the one shown.
+ */
+export const technicianNamesIn = (orders = []) => {
+  const byKey = new Map();
+  (orders || []).forEach(o => {
+    const clean = String(o?.technicianName ?? '').trim();
+    const key = technicianKey(clean);
+    if (key && !byKey.has(key)) byKey.set(key, clean);
+  });
+  return [...byKey.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+};
+
+/** Whether the order is that technician's. A blank choice matches every order. */
+export const matchesTechnician = (order, selected) => {
+  const wanted = technicianKey(selected);
+  return !wanted || technicianKey(order?.technicianName) === wanted;
+};
